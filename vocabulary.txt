@@ -1,0 +1,13 @@
+# Words Tomo's speech recognition should expect, one per line. Lines starting with # are ignored.
+# build.sh copies this file to ~/.config/tomo/vocabulary.txt once; edit that copy. It is read each time you start talking.
+# Up to 100 hints are used in all, these first, then app names and saved shortcuts.
+
+# Names and brands
+Tomo
+Edanz
+Scribendi
+Liwen-Bianji
+Weave
+Obsidian
+
+# Japanese words: Sam's list goes here

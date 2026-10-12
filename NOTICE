@@ -1,0 +1,10 @@
+Tomo
+Copyright (c) 2026 Sam (skinred78)
+
+Tomo is a fork of Atticus by SaarthurR (https://github.com/SaarthurR/atticus-mac), imported at commit 39c27c9
+(11 Oct 2026). Atticus is MIT licensed, Copyright (c) 2026 SaarthurR. Its licence and copyright notice are kept,
+unchanged, in LICENSE and apply to this fork.
+
+Atticus's idea came from Caleb Writes Code's "Atticus".
+
+ui/orbs.js is from thinking-orbs by Jakub Antalik (https://github.com/Jakubantalik/thinking-orbs), MIT licensed.

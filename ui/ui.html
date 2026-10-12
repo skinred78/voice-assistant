@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Atticus overlay. Atticus.app loads this, puts orbs.js in place of the marker below, and calls window.ui.* -->
+<!-- Tomo overlay. Tomo.app loads this, puts orbs.js in place of the marker below, and calls window.ui.* -->
 <style>
   :root { color-scheme: dark; --ease: cubic-bezier(.2,.8,.2,1); --spring: cubic-bezier(.34,1.56,.64,1); }
   html, body { margin: 0; background: transparent; overflow: hidden; -webkit-user-select: none; cursor: default;
@@ -72,7 +72,7 @@
       0 4px 14px rgba(0,0,0,.35); }
   #x.hot svg { transform: rotate(90deg); }
 
-  /* safe mode: Atticus asks before it deletes, sends or buys */
+  /* safe mode: Tomo asks before it deletes, sends or buys */
   .ok { margin-top: 10px; padding: 11px 12px 12px; border-radius: 14px; background: rgba(255,255,255,.07); cursor: pointer;
     box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); animation: grow .32s var(--spring) both; overflow: hidden; max-height: 320px;
     transition: max-height .34s var(--ease), opacity .25s, margin .34s var(--ease), padding .34s var(--ease), background .2s; }
@@ -178,7 +178,7 @@
 <div id="card">
   <div id="head"><canvas id="orb"></canvas><div id="status"></div></div>
   <div id="thread"></div>
-  <div id="comp" inert><input id="ask" placeholder="Ask Atticus…" autocomplete="off" spellcheck="false" aria-label="Ask Atticus">
+  <div id="comp" inert><input id="ask" placeholder="Ask Tomo…" autocomplete="off" spellcheck="false" aria-label="Ask Tomo">
     <button id="mic" title="Talk instead" aria-label="Talk instead"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button></div>
 </div>
 <div class="e" id="eL"></div><div class="e" id="eR"></div><div class="e" id="eT"></div><div class="e" id="eB"></div>
@@ -275,7 +275,7 @@
   const clockBegin = () => {
     if (clockStart !== null || clockHeld !== null || !turn()) return;
     clock = document.createElement('div'); clock.className = 'elapsed';
-    clock.title = 'Time Atticus spent working. Waiting for your pick or approval is not counted.';
+    clock.title = 'Time Tomo spent working. Waiting for your pick or approval is not counted.';
     clock.innerHTML = '<b></b>';
     turn().append(clock); clockStart = performance.now(); clockTick();
   };
