@@ -140,10 +140,18 @@ RISKY = [('Delete something?', r'\b(rm|rmdir|srm|unlink|shred|trash|mv)\s|\bdele
 QUIET = (SEARCH, READ, LOOK, FRONT, SHOW, PLACE, PLAY, TYPE, REMEMBER, FORGET, ABOUT, PICK, SET, 'open ', 'mdfind ', 'pbpaste')   # never delete, send or buy
 
 
+def leaks(url):
+    """A GET that carries data out in its address: a long query, or a long token-like value (base64, hex, a file's contents)."""
+    q = urllib.parse.urlsplit(url).query
+    return len(q) > 300 or any(re.fullmatch(r'[A-Za-z0-9/=_-]{40,}', v) for _, v in urllib.parse.parse_qsl(q))
+
+
 def risky(cmd):
     """-> the question to ask the user, or '' when the command can just run."""
     for part in re.split(r'[;&|\n]', cmd):
         part = part.strip()
+        if any(leaks(u) for u in re.findall(r'https?://[^\s"\'<>]+', part)):   # curl, --read, open: data in a URL leaves too
+            return 'Send data out?'
         if part.startswith(QUIET) and '$(' not in part and '`' not in part:
             continue
         for q, rx in RISKY:
@@ -167,22 +175,52 @@ def wait_commit():
     return False
 
 
+READ_OK = ('Documents', 'Desktop', 'Downloads')   # plus the vault and temp folders (screenshots): everything else is never read
+
+
+def read_blocked(path):
+    """-> why the AI may not Read this file, or ''. Symlinks and ".." are resolved first, so ~/Documents/../.ssh is caught."""
+    p = os.path.realpath(os.path.expanduser(path))
+    roots = [os.path.join(HOME, d) for d in READ_OK] + [os.path.expanduser(pref('vault', '~/obsidian-vault')), tempfile.gettempdir(), os.environ.get('ATTICUS_TMP') or '/tmp', '/tmp']
+    if any(p == r or p.startswith(r + os.sep) for r in map(os.path.realpath, roots)):
+        return ''
+    return f'Reading {path} is not allowed: only the Obsidian vault, Documents, Desktop and Downloads. Do not try another way; say you cannot read it.'
+
+
+SECRETS = re.compile(r'(~|\$HOME|\$\{HOME\}|' + re.escape(HOME) + r')/(\.ssh|\.aws|\.gnupg|\.netrc|\.config/gh|Library/Keychains|Library/Cookies|'
+                     r'Library/Application Support/(Google/Chrome|BraveSoftware|Firefox|Arc|Microsoft Edge))|\bsecurity\s+(find|dump)-')
+
+
+def deny(why):
+    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny', 'permissionDecisionReason': why}}))
+
+
 def gate():
-    """Claude Code's PreToolUse hook in safe mode: a risky command waits for the user's Allow (60 s, then no).
+    """Claude Code's PreToolUse hook, on every tool. Read: only the vault, Documents, Desktop, Downloads (safe mode or not).
+    Safe mode: a risky command, or a WebFetch that carries data out in its address, waits for the user's Allow (60 s, then no).
     Allowed = it runs for real, outside the sandbox. The AI asking to leave the sandbox by itself asks too."""
-    inp = json.load(sys.stdin).get('tool_input', {})
+    j = json.load(sys.stdin)
+    inp, tool = j.get('tool_input', {}), j.get('tool_name', 'Bash')
     if not wait_commit():
-        print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
-                          'permissionDecisionReason': 'The request was cancelled before the transcript was confirmed.'}}))
-        return
-    cmd = inp.get('command', '')
-    q = risky(cmd) or ('Run outside the safe folder?' if inp.get('dangerouslyDisableSandbox') else '')
+        return deny('The request was cancelled before the transcript was confirmed.')
+    if tool == 'Read':
+        why = read_blocked(inp.get('file_path', ''))
+        return why and deny(why)
+    if tool == 'WebFetch':
+        cmd = inp.get('url', '')
+        q = 'Send data out?' if leaks(cmd) else ''
+    else:
+        cmd = inp.get('command', '')
+        if SECRETS.search(cmd):
+            return deny('That touches private files (keys, passwords, browser data), which are never read or changed. Say you cannot do it.')
+        q = risky(cmd) or ('Run outside the safe folder?' if inp.get('dangerouslyDisableSandbox') else '')
     if not q or not os.environ.get('ATTICUS_ASK') or not pref('safe', True):
         return
     ok = ask_user({'q': q, 'cmd': cmd[:800]}, 60) == 'y'
-    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'allow', 'updatedInput': {**inp, 'dangerouslyDisableSandbox': True}}} if ok else
-                     {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
-                                             'permissionDecisionReason': 'The user said no. Do not try another way; say it was not done.'}}))
+    if not ok:
+        return deny('The user said no. Do not try another way; say it was not done.')
+    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'allow',
+                                             'updatedInput': {**inp, 'dangerouslyDisableSandbox': True} if tool == 'Bash' else inp}}))
 
 
 def ask_user(j, secs):
@@ -976,14 +1014,14 @@ def start_claude():
     atexit.register(shutil.rmtree, ask, True)   # however this run ends
     if pref('safe', True):
         settings['sandbox'] = {'enabled': True, 'autoAllowBashIfSandboxed': True, 'allowUnsandboxedCommands': True, 'excludedCommands': SAFE_OUT}
-    if pref('safe', True) or os.environ.get('ATTICUS_COMMIT'):
-        settings['hooks'] = {'PreToolUse': [{'matcher': '.*', 'hooks': [{'type': 'command', 'command': f'"{sys.executable}" "{ME}" --gate', 'timeout': 140}]}]}
+    # every tool, always: the Read rule holds in full access too
+    settings['hooks'] = {'PreToolUse': [{'matcher': '.*', 'hooks': [{'type': 'command', 'command': f'"{sys.executable}" "{ME}" --gate', 'timeout': 140}]}]}
     errors = tempfile.TemporaryFile(mode='w+')   # draining a pipe only after wait() can deadlock
     p = subprocess.Popen(['claude', '-p', '--input-format', 'stream-json', '--model', pref('model', 'haiku'), '--effort', 'low', '--system-prompt', system,
                           '--tools', 'Bash,Read,WebSearch,WebFetch', '--permission-mode', 'bypassPermissions', '--disallowedTools', *DENY, '--settings', json.dumps(settings),
                           '--setting-sources', '', '--no-session-persistence', '--strict-mcp-config', '--disable-slash-commands', '--output-format', 'stream-json', '--verbose'],
                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True, cwd=tempfile.gettempdir(), start_new_session=True,
-                         env={**os.environ, 'ATTICUS_ASK': ask})
+                         env={**os.environ, 'ATTICUS_ASK': ask, 'ATTICUS_TMP': tempfile.gettempdir()})   # ATTICUS_TMP: where screenshots are, for read_blocked
     p.ask, p.errors = ask, errors
     atexit.register(errors.close)
     atexit.register(stop_claude, p)
