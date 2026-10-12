@@ -1,7 +1,7 @@
-// Atticus overlay: hold to talk and release to send, or press to start and press again to send.
+// Tomo overlay: hold to talk and release to send, or press to start and press again to send.
 // A box in the top left (ui/ui.html, with the thinking-orbs orb) shows your words live (Apple on-device speech),
-// then Atticus's notes and steps while `atticus.py` works, then the answer. It never takes focus.
-// Build: ./build.sh. Kept running by ~/Library/LaunchAgents/com.skinred78.voice-assistant.plist
+// then Tomo's notes and steps while `atticus.py` works, then the answer. It never takes focus.
+// Build: ./build.sh. Kept running by ~/Library/LaunchAgents/com.skinred78.tomo.plist
 import Cocoa
 import Carbon
 import AVFoundation
@@ -12,11 +12,11 @@ import Vision
 
 let dir = Bundle.main.resourcePath!   // build.sh copies atticus.py and ui/ in here
 
-// Settings, shared with atticus.py (model, screen, openOn, instant): ~/.config/voice-assistant/settings.json
+// Settings, shared with atticus.py (model, screen, openOn, instant): ~/.config/tomo/settings.json
 enum Prefs {
-    static let path = NSString(string: "~/.config/voice-assistant/settings.json").expandingTildeInPath
+    static let path = NSString(string: "~/.config/tomo/settings.json").expandingTildeInPath
     static let defaults: [String: Any] = ["hotkeyCode": 49, "hotkeyMods": controlKey | optionKey, "hotkeyLabel": "⌃⌥Space", "login": true, "paused": false, "corner": "top-left", "linger": "normal",
-        "soundStart": "Pop", "soundDone": "Glass", "soundStop": "Tink", "volume": 0.16, "model": "haiku", "instant": true,
+        "soundStart": "Pop", "soundDone": "Glass", "soundStop": "Tink", "volume": 0.16, "model": "haiku", "instant": true, "locale": "en-AU",
         "ahead": true, "aheadDelay": 0.7, "live": true, "screen": "auto", "openOn": "here",
         "speak": false, "autoCopy": false, "hideWhenSharing": true, "menuIcon": true,
         "learn": true, "safe": true, "pointer": false, "learnMe": true, "tips": true, "askMe": true, "input": "voice", "talkMode": "hold", "boxW": 460, "boxH": 360]
@@ -30,6 +30,8 @@ enum Prefs {
     static func bool(_ k: String) -> Bool { d[k] as? Bool ?? false }
     static func str(_ k: String) -> String { d[k] as? String ?? "" }
     static func num(_ k: String) -> Double { (d[k] as? NSNumber)?.doubleValue ?? 0 }
+    // Speech: Australian English by default ("locale" in settings.json, e.g. "en-GB" or "en-US").
+    static var speechLocale: Locale { Locale(identifier: str("locale").isEmpty ? "en-AU" : str("locale")) }
 }
 
 // Read-aloud uses the Mac's Spoken Content voice, and most people never pick one: once, switch it to Siri's.
@@ -94,7 +96,7 @@ final class Tracker: NSView {
     override func mouseExited(with e: NSEvent) { onExit?() }
 }
 
-// The box can take typing (canBecomeKey) without pulling Atticus forward (nonactivating): the user's app stays in front.
+// The box can take typing (canBecomeKey) without pulling Tomo forward (nonactivating): the user's app stays in front.
 final class KeyPanel: NSPanel { override var canBecomeKey: Bool { true } }
 
 final class App: NSObject, WKScriptMessageHandler {
@@ -119,8 +121,8 @@ final class App: NSObject, WKScriptMessageHandler {
     var toggleTalk = false, shortcutDown = false
     var askFile = ""   // safe mode: where the Allow / Don't Allow answer goes (atticus.py's gate waits on it)
     var hovering = false, xHot = false, pinned = false, stuck = false, lastDone = Date.distantPast   // pinned: the user clicked the box, so only Esc / click-out / ✕ close it; stuck: the user dragged it, so only ✕
-    var mine = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""   // the app the user's in, never Atticus itself
-    let recent = NSString(string: "~/.config/voice-assistant/recent.jsonl").expandingTildeInPath
+    var mine = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""   // the app the user's in, never Tomo itself
+    let recent = NSString(string: "~/.config/tomo/recent.jsonl").expandingTildeInPath
     func frame(_ requested: NSRect) {   // keep the close button and composer reachable on every display
         let screen = NSScreen.screens.max { a, b in
             let x = a.visibleFrame.intersection(requested), y = b.visibleFrame.intersection(requested)
@@ -143,13 +145,16 @@ final class App: NSObject, WKScriptMessageHandler {
         return l || r || t || b ? (l, r, t, b) : nil
     }
     func overX(_ p: NSPoint) -> Bool { p.x > panel.frame.width - 42 && p.y > panel.frame.height - 42 }
-    // Words the recognizer should expect: the user's app names plus a few of the user's own (free, on-device).
+    // Words the recognizer should expect: the user's own vocabulary list first (Japanese words, names, brands),
+    // then app names and a few of the user's own (free, on-device). Capped at 100.
     var hints: [String] {
         let config = (Prefs.path as NSString).deletingLastPathComponent
+        let vocab = ((try? String(contentsOfFile: config + "/vocabulary.txt", encoding: .utf8)) ?? "").components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && !$0.hasPrefix("#") }
         let shortcuts = (try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: config + "/skills.json")))) as? [String: Any] ?? [:]
         let user = (try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: config + "/me.json")))) as? [String: Any] ?? [:]
         var seen = Set<String>()
-        return Array((["Atticus", "Chrome", "VS Code", "Peekaboo", "split screen", "study mode", user["name"] as? String ?? ""] + shortcuts.keys.sorted() +
+        return Array((vocab + ["Tomo", "Chrome", "VS Code", "Peekaboo", "split screen", "study mode", user["name"] as? String ?? ""] + shortcuts.keys.sorted() +
         [NSHomeDirectory() + "/Applications", "/Applications", "/System/Applications", "/System/Applications/Utilities"].flatMap {
             ((try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? []).filter { $0.hasSuffix(".app") }.map { String($0.dropLast(4)) }
         }).filter { !$0.isEmpty && seen.insert($0).inserted }.prefix(100))
@@ -266,7 +271,7 @@ final class App: NSObject, WKScriptMessageHandler {
             guard let self else { return }; frame(panel.frame)
         }
         Task { [weak self] in   // make sure the speech model is installed, and learn its audio format
-            let tr = SpeechTranscriber(locale: Locale(identifier: "en-US"), preset: .progressiveTranscription)
+            let tr = SpeechTranscriber(locale: Prefs.speechLocale, preset: .progressiveTranscription)
             if let r = try? await AssetInventory.assetInstallationRequest(supporting: [tr]) { try? await r.downloadAndInstall() }
             let f = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [tr])
             await MainActor.run { self?.speechFormat = f }
@@ -439,10 +444,10 @@ final class App: NSObject, WKScriptMessageHandler {
         js("shortcut", toggleTalk ? "Press again to send" : clickTalk ? "" : "Release keys to send")
         show()
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
-            hush(); js("msg", "Allow Atticus in System Settings → Privacy & Security → Microphone."); hide(after: 6); return
+            hush(); js("msg", "Allow Tomo in System Settings → Privacy & Security → Microphone."); hide(after: 6); return
         }
         listenID += 1; let listeningID = listenID
-        let tr = SpeechTranscriber(locale: Locale(identifier: "en-US"), preset: .progressiveTranscription)
+        let tr = SpeechTranscriber(locale: Prefs.speechLocale, preset: .progressiveTranscription)
         let (stream, cont) = AsyncStream<AnalyzerInput>.makeStream()
         let an = SpeechAnalyzer(modules: [tr])
         feed = cont; analyzer = an
@@ -526,7 +531,7 @@ final class App: NSObject, WKScriptMessageHandler {
     func startAhead() {
         let r = rest()
         guard engine.isRunning, !fastBusy, !liveRevised, !r.isEmpty, transcriptKey(r) != transcriptKey(ahead) else { return }
-        let core = r.lowercased().replacingOccurrences(of: #"^(?:(?:hey|ok|okay|atticus|please|can you|could you|would you|also|and|now|then)[,\s]+)+"#, with: "", options: .regularExpression)
+        let core = r.lowercased().replacingOccurrences(of: #"^(?:(?:hey|ok|okay|tomo|please|can you|could you|would you|also|and|now|then)[,\s]+)+"#, with: "", options: .regularExpression)
         if ["open", "launch", "start", "pull up", "bring up", "focus", "switch to", "go to", "snap", "move", "put", "throw", "send", "make", "play", "search", "google", "look up"].contains(where: { core.hasPrefix($0 + " ") }) || hints.contains(where: { transcriptKey($0) == transcriptKey(r) }) { return }
         dropAhead()
         ahead = r
@@ -651,7 +656,7 @@ final class App: NSObject, WKScriptMessageHandler {
                         guard p.count == 3 else { continue }
                         self.askFile = p[2]; self.show(); self.js("ask", [p[0], p[1]]); continue
                     }
-                    if line.hasPrefix("⚙ ") {   // "⚙ <key> <true|false>": the AI flips one of Atticus's switches; never safe mode or pause
+                    if line.hasPrefix("⚙ ") {   // "⚙ <key> <true|false>": the AI flips one of Tomo's switches; never safe mode or pause
                         let p = line.split(separator: " ").map(String.init)
                         if p.count == 3, Prefs.defaults[p[1]] is Bool, !["safe", "paused"].contains(p[1]) { Atticus.settings.apply(p[1], p[2] == "true"); Atticus.settings.push() }
                         continue
@@ -702,7 +707,7 @@ final class App: NSObject, WKScriptMessageHandler {
 }
 
 // First-run window (ui/onboarding.html): welcome, then each macOS permission with an Allow button, then how to use it.
-// Shows until finished once; to see it again: defaults delete com.skinred78.voice-assistant onboarded, then restart the app.
+// Shows until finished once; to see it again: defaults delete com.skinred78.tomo onboarded, then restart the app.
 final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
     var win: NSWindow?, web: WKWebView?, timer: Timer?
     let pane = "x-apple.systempreferences:com.apple.preference.security?Privacy_"
@@ -759,7 +764,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
             let p = py(["--check"]), out = Pipe(); p.standardOutput = out
             try? p.run(); p.waitUntilExit()
             let j = (try? JSONSerialization.jsonObject(with: out.fileHandleForReading.readDataToEndOfFile())) as? [String: Any]
-            DispatchQueue.main.async { done(j ?? ["ok": false, "need": "install", "text": "Could not run Atticus’s helper (python3 missing?)."]) }
+            DispatchQueue.main.async { done(j ?? ["ok": false, "need": "install", "text": "Could not run Tomo’s helper (python3 missing?)."]) }
         }
     }
 
@@ -777,7 +782,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
             if need == "upgrade" { NSWorkspace.shared.open(URL(string: "https://claude.ai/upgrade")!); return }
             let cmd = need == "install" ? "curl -fsSL https://claude.ai/install.sh | bash && ~/.local/bin/claude auth login" : "claude auth login"
             let f = NSTemporaryDirectory() + "atticus-claude.command"
-            try? "#!/bin/zsh\nexport PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\"\necho 'Atticus: setting up Claude Code'\n\(cmd)\necho; echo 'Done. You can close this window.'\n".write(toFile: f, atomically: true, encoding: .utf8)
+            try? "#!/bin/zsh\nexport PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\"\necho 'Tomo: setting up Claude Code'\n\(cmd)\necho; echo 'Done. You can close this window.'\n".write(toFile: f, atomically: true, encoding: .utf8)
             chmod(f, 0o755)
             NSWorkspace.shared.open(URL(fileURLWithPath: f))
             self?.checkPlan()
@@ -835,7 +840,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
     }
 }
 
-// `Atticus --look <screen #> <out.jpg>` (atticus.py --look): the screen without Atticus's own box on it, 1280 px wide.
+// `Tomo --look <screen #> <out.jpg>` (atticus.py --look): the screen without Tomo's own box on it, 1280 px wide.
 if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--look" {
     let a = CommandLine.arguments, done = DispatchSemaphore(value: 0)
     let scr = NSScreen.screens[max(0, min((Int(a[2]) ?? 1) - 1, NSScreen.screens.count - 1))]
@@ -855,7 +860,7 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--look" {
     exit(FileManager.default.fileExists(atPath: a[3]) ? 0 : 1)
 }
 
-// `Atticus --text <app> [title words]` (atticus.py --watch): the text in that app's window, read on this Mac, even when covered.
+// `Tomo --text <app> [title words]` (atticus.py --watch): the text in that app's window, read on this Mac, even when covered.
 if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--text" {
     let a = CommandLine.arguments, words = a.count > 3 ? a[3].lowercased() : "", done = DispatchSemaphore(value: 0)
     var found = false
@@ -907,11 +912,11 @@ func pointAt(_ line: String) {
 
 func jsonString(_ s: String) -> String { String(data: try! JSONSerialization.data(withJSONObject: [s]), encoding: .utf8)!.dropFirst().dropLast().description }
 
-// Restart Atticus (Screen Recording only takes effect in a new process); works under launchd or when opened by hand.
+// Restart Tomo (Screen Recording only takes effect in a new process); works under launchd or when opened by hand.
 func relaunchSoon() {
     let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/sh")
-    p.arguments = ["-c", "sleep 1; launchctl bootout gui/\(getuid())/com.skinred78.voice-assistant >/dev/null 2>&1; sleep 1; launchctl bootstrap gui/\(getuid()) \"$1\" 2>/dev/null || open \"$0\"",
-                   Bundle.main.bundlePath, NSHomeDirectory() + "/Library/LaunchAgents/com.skinred78.voice-assistant.plist"]
+    p.arguments = ["-c", "sleep 1; launchctl bootout gui/\(getuid())/com.skinred78.tomo >/dev/null 2>&1; sleep 1; launchctl bootstrap gui/\(getuid()) \"$1\" 2>/dev/null || open \"$0\"",
+                   Bundle.main.bundlePath, NSHomeDirectory() + "/Library/LaunchAgents/com.skinred78.tomo.plist"]
     try? p.run()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
 }
@@ -921,7 +926,7 @@ enum Version {
     static let string = Bundle.main.object(forInfoDictionaryKey: "SourceCommit") as? String ?? ""
 }
 
-// Opening Atticus again (Spotlight, Finder, Dock) while it runs: setup the first time, Settings after.
+// Opening Tomo again (Spotlight, Finder, Dock) while it runs: setup the first time, Settings after.
 final class Delegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ n: Notification) { app.hush(); app.shush() }
     func applicationShouldHandleReopen(_ s: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -935,7 +940,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     override init() {
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
+        item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Tomo")
         let m = NSMenu(); m.delegate = self; item.menu = m
         item.isVisible = Prefs.bool("menuIcon")
         paint()
@@ -945,23 +950,23 @@ final class MenuBar: NSObject, NSMenuDelegate {
         m.removeAllItems()
         let keys = Prefs.str("hotkeyLabel")
         let hint = Prefs.str("input") == "type" ? "Press \(keys) to type" : Prefs.str("talkMode") == "toggle" ? "Press \(keys) to talk · again to send" : "Hold \(keys) and talk"
-        let head = NSMenuItem(title: Prefs.bool("paused") ? "Voice Assistant is paused" : hint, action: nil, keyEquivalent: "")
+        let head = NSMenuItem(title: Prefs.bool("paused") ? "Tomo is paused" : hint, action: nil, keyEquivalent: "")
         head.isEnabled = false; m.addItem(head)
         m.addItem(.separator())
-        add(m, "Ask Atticus", #selector(ask), "")
-        add(m, Prefs.bool("paused") ? "Resume Atticus" : "Pause Atticus", #selector(pause), "")
+        add(m, "Ask Tomo", #selector(ask), "")
+        add(m, Prefs.bool("paused") ? "Resume Tomo" : "Pause Tomo", #selector(pause), "")
         m.addItem(.separator())
         let u = NSMenuItem(title: today(), action: nil, keyEquivalent: ""); u.isEnabled = false; m.addItem(u)
         m.addItem(.separator())
         add(m, "Settings…", #selector(openSettings), ",")
         add(m, "Setup & Permissions…", #selector(openSetup), "")
         m.addItem(.separator())
-        add(m, "Quit Atticus", #selector(quit), "q")
+        add(m, "Quit Tomo", #selector(quit), "q")
     }
     func add(_ m: NSMenu, _ t: String, _ a: Selector, _ k: String) { let i = NSMenuItem(title: t, action: a, keyEquivalent: k); i.target = self; m.addItem(i) }
     func today() -> String {
         let day = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
-        let log = (try? String(contentsOfFile: NSString(string: "~/.config/voice-assistant/log.jsonl").expandingTildeInPath, encoding: .utf8)) ?? ""
+        let log = (try? String(contentsOfFile: NSString(string: "~/.config/tomo/log.jsonl").expandingTildeInPath, encoding: .utf8)) ?? ""
         let rows = log.split(separator: "\n").compactMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
             .filter { ($0["at"] as? String ?? "").hasPrefix(day) }
         let usd = rows.reduce(0.0) { $0 + (($1["usd"] as? NSNumber)?.doubleValue ?? 0) }
@@ -975,7 +980,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
 }
 
 // Settings window (ui/settings.html): every setting lives in Prefs; atticus.py reads the same file.
-// Apps Atticus may control. macOS asks once per app, only while that app runs, and has no "allow all". So Settings > Apps
+// Apps Tomo may control. macOS asks once per app, only while that app runs, and has no "allow all". So Settings > Apps
 // lists every installed app and asks for all the ticked ones in one go: start each hidden, ask, quit it again.
 // macOS only answers "allowed?" for running apps, so what it said is kept in UserDefaults ("allowedApps").
 enum Apps {
@@ -1067,7 +1072,7 @@ enum Apps {
                 guard wait(answered, 20), r.code == OSStatus(procNotFound) else { break }
                 Thread.sleep(forTimeInterval: 0.25)
             }
-            started?.terminate()   // only the ones Atticus started
+            started?.terminate()   // only the ones Tomo started
             progress(id, statuses([id])[id]!)
         }
     }
@@ -1084,7 +1089,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         tab = t
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
                          styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
-        w.titlebarAppearsTransparent = true; w.titleVisibility = .hidden; w.title = "Voice Assistant Settings"
+        w.titlebarAppearsTransparent = true; w.titleVisibility = .hidden; w.title = "Tomo Settings"
         w.isReleasedWhenClosed = false; w.delegate = self
         let bg = NSVisualEffectView(frame: w.contentRect(forFrameRect: w.frame))
         bg.material = .underWindowBackground; bg.blendingMode = .behindWindow; bg.state = .active
@@ -1176,7 +1181,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         if k == "safe" { app.js("mode", v as? Bool == true) }
         if k == "login" {   // the LaunchAgent build.sh installed: enabled = starts at login
             let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            p.arguments = [v as? Bool == true ? "enable" : "disable", "gui/\(getuid())/com.skinred78.voice-assistant"]; try? p.run()
+            p.arguments = [v as? Bool == true ? "enable" : "disable", "gui/\(getuid())/com.skinred78.tomo"]; try? p.run()
         }
     }
 
@@ -1198,7 +1203,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         case "preview":
             if let n = b["sound"] as? String { app.sound(n, Float(Prefs.num("volume"))) }
         case "setup": onboarding.open()
-        case "openLog": NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.config/voice-assistant/log.jsonl").expandingTildeInPath))
+        case "openLog": NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.config/tomo/log.jsonl").expandingTildeInPath))
         case "clearRecent": try? FileManager.default.removeItem(atPath: app.recent); app.lastDone = .distantPast
         case "me":   // About you: name / about / drop a fact
             guard let what = b["what"] as? String, let text = b["text"] as? String else { return }
@@ -1233,7 +1238,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
     }
 }
 
-// One Atticus at a time: a lock the system drops when the process ends (opened by hand + started by launchd = two)
+// One Tomo at a time: a lock the system drops when the process ends (opened by hand + started by launchd = two)
 if CommandLine.arguments.dropFirst() == ["--selftest"] {
     precondition(transcriptKey(" Open   Notes. ") == transcriptKey("open notes"))
     precondition(transcriptKey("calculate 1.5") != transcriptKey("calculate 15"))
@@ -1241,7 +1246,7 @@ if CommandLine.arguments.dropFirst() == ["--selftest"] {
     precondition(transcriptKey("open a-b.com") != transcriptKey("open ab.com"))
     print("native selftest ok"); exit(0)
 }
-let lockFD = open(NSString(string: "~/.config/voice-assistant/app.lock").expandingTildeInPath, O_CREAT | O_RDWR, 0o644)
+let lockFD = open(NSString(string: "~/.config/tomo/app.lock").expandingTildeInPath, O_CREAT | O_RDWR, 0o644)
 if lockFD >= 0 && flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     for _ in 0..<15 where flock(lockFD, LOCK_EX | LOCK_NB) != 0 { usleep(100_000) }   // a restart: the old one is exiting
     if flock(lockFD, LOCK_EX | LOCK_NB) != 0 { exit(0) }
@@ -1273,7 +1278,7 @@ let bar = MenuBar()
 let delegate = Delegate()
 NSApplication.shared.delegate = delegate
 
-// Test hook: `defaults write com.skinred78.voice-assistant demo -string "<request>"` then restart runs it once without the mic.
+// Test hook: `defaults write com.skinred78.tomo demo -string "<request>"` then restart runs it once without the mic.
 if let demo = UserDefaults.standard.string(forKey: "demo") {
     UserDefaults.standard.removeObject(forKey: "demo")
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { app.js("listen"); app.show(); app.js("words", demo); app.run(demo) }

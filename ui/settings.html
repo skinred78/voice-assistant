@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Atticus settings. Atticus.swift calls st.load({prefs, state}) and gets {do:'set', k, v} and other actions back. -->
+<!-- Tomo settings. Atticus.swift calls st.load({prefs, state}) and gets {do:'set', k, v} and other actions back. -->
 <style>
   :root {
     --fg: #1d1d1f; --fg2: #6e6e73; --fg3: #8e8e93; --card: rgba(255,255,255,.66); --line: rgba(0,0,0,.08);
@@ -150,7 +150,7 @@
 </style></head><body>
 
 <nav>
-  <div class="me"><img id="icon" alt=""><div><b>Atticus</b><span>Just ask.</span></div></div>
+  <div class="me"><img id="icon" alt=""><div><b>Tomo</b><span>Just ask.</span></div></div>
   <button data-s="general" class="on"><i class="ni" style="background:#8e8e93"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></i>General</button>
   <button data-s="sound"><i class="ni" style="background:#ff375f"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></i>Sound</button>
   <button data-s="brain"><i class="ni" style="background:#d97757"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/></svg></i>Intelligence</button>
@@ -179,18 +179,18 @@
       <div class="row"><div class="t"><b id="talklabel">Shortcut behavior</b><span id="talkhint">Hold to listen. Release to send.</span></div><div class="seg" data-k="talkMode" role="group" aria-labelledby="talklabel"><button data-v="hold">Hold to talk</button><button data-v="toggle">Press to toggle</button></div></div>
       <div class="row"><div class="t"><span>While answering, press the shortcut to stop. Esc cancels without sending.</span></div></div>
     </div>
-    <h3>Atticus</h3>
+    <h3>Tomo</h3>
     <div class="group">
       <div class="row"><div class="t"><b>Open at login</b><span>Ready the moment your Mac is.</span></div><label class="sw"><input type="checkbox" data-k="login"></label></div>
-      <div class="row"><div class="t"><b>Pause Atticus</b><span>The shortcut does nothing until you turn this off.</span></div><label class="sw"><input type="checkbox" data-k="paused"></label></div>
-      <div class="row"><div class="t"><b>Show in menu bar</b><span>Hidden? Open Atticus from Spotlight to get back here.</span></div><label class="sw"><input type="checkbox" data-k="menuIcon"></label></div>
+      <div class="row"><div class="t"><b>Pause Tomo</b><span>The shortcut does nothing until you turn this off.</span></div><label class="sw"><input type="checkbox" data-k="paused"></label></div>
+      <div class="row"><div class="t"><b>Show in menu bar</b><span>Hidden? Open Tomo from Spotlight to get back here.</span></div><label class="sw"><input type="checkbox" data-k="menuIcon"></label></div>
     </div>
     <h3>Answers</h3>
     <div class="group">
       <div class="row"><div class="t"><b>Read answers aloud</b><span>In your Mac’s system voice. Esc stops it.</span></div><label class="sw"><input type="checkbox" data-k="speak"></label></div>
       <div class="row"><div class="t"><b>Copy answers automatically</b><span>Every answer lands on your clipboard, ready to paste.</span></div><label class="sw"><input type="checkbox" data-k="autoCopy"></label></div>
-      <div class="row"><div class="t"><b>Tips</b><span>Once in a while, a small tip under the answer. After a miss, how to teach Atticus to do it right.</span></div><label class="sw"><input type="checkbox" data-k="tips"></label></div>
-      <div class="row"><div class="t"><b>Ask me when unsure</b><span>When more than one thing fits, Atticus shows you the choices in the box instead of guessing.</span></div><label class="sw"><input type="checkbox" data-k="askMe"></label></div>
+      <div class="row"><div class="t"><b>Tips</b><span>Once in a while, a small tip under the answer. After a miss, how to teach Tomo to do it right.</span></div><label class="sw"><input type="checkbox" data-k="tips"></label></div>
+      <div class="row"><div class="t"><b>Ask me when unsure</b><span>When more than one thing fits, Tomo shows you the choices in the box instead of guessing.</span></div><label class="sw"><input type="checkbox" data-k="askMe"></label></div>
     </div>
     <h3>The answer box</h3>
     <div class="group">
@@ -202,7 +202,7 @@
 
   <section id="sound">
     <h1>Sound</h1>
-    <p class="lede">Small cues so you know Atticus heard you, without looking.</p>
+    <p class="lede">Small cues so you know Tomo heard you, without looking.</p>
     <div class="group">
       <div class="row"><div class="t"><b>When it starts listening</b></div><select data-k="soundStart"></select></div>
       <div class="row"><div class="t"><b>When an answer is ready</b></div><select data-k="soundDone"></select></div>
@@ -213,7 +213,7 @@
 
   <section id="brain">
     <h1>Intelligence</h1>
-    <p class="lede">Atticus thinks with Claude, on your Claude plan.</p>
+    <p class="lede">Tomo thinks with Claude, on your Claude plan.</p>
     <h3>Model</h3>
     <div class="group">
       <div class="row"><div class="t"><b>Claude model</b><span id="modelwhy"></span></div><div class="seg" data-k="model"><button data-v="haiku">Haiku</button><button data-v="sonnet">Sonnet</button><button data-v="opus">Opus</button></div></div>
@@ -222,7 +222,7 @@
     <div class="group">
       <div class="row"><div class="t"><b>Instant commands</b><span>Opening apps, moving windows, searches and music run locally with no AI.</span></div><label class="sw"><input type="checkbox" data-k="instant"></label></div>
       <div class="row"><div class="t"><b>Act while I’m talking</b><span>With Instant commands on, supported commands run mid-sentence. Learned shortcuts wait for confirmed words.</span></div><label class="sw"><input type="checkbox" data-k="live"></label></div>
-      <div class="row"><div class="t"><b>Learn shortcuts</b><span>When the AI does something new and it works, Atticus saves the steps. Say the same thing again: no AI cost, after your words are confirmed.</span></div><label class="sw"><input type="checkbox" data-k="learn"></label></div>
+      <div class="row"><div class="t"><b>Learn shortcuts</b><span>When the AI does something new and it works, Tomo saves the steps. Say the same thing again: no AI cost, after your words are confirmed.</span></div><label class="sw"><input type="checkbox" data-k="learn"></label></div>
       <div class="row"><div class="t"><b>Start while I’m talking</b><span>Starts thinking during a pause. AI tools wait until you send and your words are confirmed.</span></div><label class="sw"><input type="checkbox" data-k="ahead"></label></div>
       <div class="row"><div class="t"><b>Pause before starting</b><span>Shorter is faster. Longer waits more if you pause mid-sentence.</span></div><input type="range" min="0.4" max="1.5" step="0.1" data-k="aheadDelay"><span class="val" id="delayv"></span></div>
     </div>
@@ -230,10 +230,10 @@
 
   <section id="screen">
     <h1>Screen &amp; Windows</h1>
-    <p class="lede">What Atticus can see, and where things open.</p>
+    <p class="lede">What Tomo can see, and where things open.</p>
     <div class="group">
       <div class="row"><div class="t"><b>Look at my screen</b><span>Automatic: only when you say “this”, “my screen”, “this page” and the like. Pictures stay on your Mac until sent with that one ask.</span></div><div class="seg" data-k="screen"><button data-v="auto">Automatic</button><button data-v="never">Never</button></div></div>
-      <div class="row"><div class="t"><b>Hide from screen sharing</b><span>On Zoom, Meet or a recording, others see your screen but not the Atticus box.</span></div><label class="sw"><input type="checkbox" data-k="hideWhenSharing"></label></div>
+      <div class="row"><div class="t"><b>Hide from screen sharing</b><span>On Zoom, Meet or a recording, others see your screen but not the Tomo box.</span></div><label class="sw"><input type="checkbox" data-k="hideWhenSharing"></label></div>
       <div class="row"><div class="t"><b>Open apps on</b><span>The other screen keeps you where you are, but takes a second or two longer.</span></div><div class="seg" data-k="openOn"><button data-v="here">This screen</button><button data-v="other">Other screen</button></div></div>
     </div>
   </section>
@@ -242,7 +242,7 @@
     <h1>Memory</h1>
     <h3>About you</h3>
     <div class="group">
-      <div class="row"><div class="t"><b>Name</b></div><input class="field" id="myname" maxlength="40" placeholder="What should Atticus call you?" aria-label="Your name"></div>
+      <div class="row"><div class="t"><b>Name</b></div><input class="field" id="myname" maxlength="40" placeholder="What should Tomo call you?" aria-label="Your name"></div>
       <div class="row" style="align-items:flex-start"><div class="t" style="flex:none;width:120px"><b>A line about you</b><span>Sent with every ask, so keep it short.</span></div><textarea class="field" id="myabout" maxlength="200" placeholder="Student in Chicago. Uses Safari and Spotify." aria-label="About you"></textarea><span class="count" id="abcount"></span></div>
       <div class="row"><div class="t"><b>Learn about me</b><span>Picks up lasting facts you mention (your city, your apps), 8 at most. Never health, money or passwords.</span></div><label class="sw"><input type="checkbox" data-k="learnMe"></label></div>
       <div id="facts"></div>
@@ -257,7 +257,7 @@
 
   <section id="usage">
     <h1>Usage</h1>
-    <p class="lede">What Atticus has cost, priced at Claude API list rates. On a Claude plan it comes out of your plan’s usage, not your wallet.</p>
+    <p class="lede">What Tomo has cost, priced at Claude API list rates. On a Claude plan it comes out of your plan’s usage, not your wallet.</p>
     <div class="stats" id="stats"></div>
     <h3>History</h3>
     <div class="group">
@@ -268,18 +268,18 @@
 
   <section id="apps">
     <h1>Apps</h1>
-    <p class="lede">Tick the apps Atticus can control. macOS asks once for each one, so allow them all now and Atticus won’t stop to ask later.</p>
+    <p class="lede">Tick the apps Tomo can control. macOS asks once for each one, so allow them all now and Tomo won’t stop to ask later.</p>
     <div class="appbar"><div class="seg" id="appview"><button data-v="key" class="on">Key Apps</button><button data-v="all">All Apps</button></div>
       <input id="appq" class="search" placeholder="Search all apps" aria-label="Search all apps"><button class="btn blue" id="allow" disabled>Allow</button></div>
     <div id="applist"><div class="group"><div class="empty">Finding your apps…</div></div></div>
-    <p class="note">Atticus opens each app out of sight, asks, and closes it again. Click OK on each macOS box.<br>
+    <p class="note">Tomo opens each app out of sight, asks, and closes it again. Click OK on each macOS box.<br>
       Using an app that isn’t ticked? macOS asks the first time, and it shows up here as allowed.
       To take access away: System Settings → Privacy &amp; Security → Automation. <a data-do="automation">Open it</a></p>
   </section>
 
   <section id="account">
     <h1>Account &amp; Access</h1>
-    <p class="lede">What Atticus needs to work.</p>
+    <p class="lede">What Tomo needs to work.</p>
     <div class="group">
       <div class="row"><div class="t"><b>Claude</b><span class="status"><i class="dot" id="pdot"></i><span id="ptext">Checking…</span></span></div><button class="btn" data-do="setup" id="pbtn">Set Up</button></div>
     </div>
@@ -293,11 +293,11 @@
       <div class="row"><div class="t"><b>Speech Recognition</b><span>Turns your words into text, on this Mac.</span></div><span class="pill ok">Allowed</span><button class="btn" data-g="speech">Allow</button></div>
       <div class="row"><div class="t"><b>Accessibility</b><span>Moves windows and clicks buttons for you.</span></div><span class="pill ok">Allowed</span><button class="btn" data-g="ax">Allow</button></div>
       <div class="row"><div class="t"><b>Screen Recording</b><span>Looks at your screen when you say “this”.</span></div><span class="pill ok">Allowed</span><button class="btn" data-g="screen">Allow</button></div>
-      <div class="row"><div class="t"><b>Apps</b><span>Which apps Atticus can control.</span></div><button class="btn" onclick="st.tab('apps')">Choose</button></div>
+      <div class="row"><div class="t"><b>Apps</b><span>Which apps Tomo can control.</span></div><button class="btn" onclick="st.tab('apps')">Choose</button></div>
     </div>
-    <h3>Atticus</h3>
+    <h3>Tomo</h3>
     <div class="group">
-      <div class="row"><div class="t"><b>Quit Atticus</b><span>Open it again from Spotlight or Applications.</span></div><button class="btn red" data-do="quit">Quit</button></div>
+      <div class="row"><div class="t"><b>Quit Tomo</b><span>Open it again from Spotlight or Applications.</span></div><button class="btn red" data-do="quit">Quit</button></div>
     </div>
   </section>
 
@@ -310,8 +310,8 @@
   </section>
 
   <section id="about">
-    <div class="about"><img id="bigicon" alt=""><h1>Voice Assistant</h1><p id="aboutver"></p></div>
-    <h3>Voice Assistant</h3>
+    <div class="about"><img id="bigicon" alt=""><h1>Tomo</h1><p id="aboutver"></p></div>
+    <h3>Tomo</h3>
     <div class="group">
       <div class="row"><div class="t"><b>Updates</b><span>Never automatic. Pull the repo and run ./build.sh to update.</span></div></div>
       <div class="row"><div class="t"><b>Source code</b><span>On GitHub. Based on Atticus by SaarthurR (MIT).</span></div><button class="btn" data-do="github">Open</button></div>
@@ -400,7 +400,7 @@
     $('newrule').value = typed; $('addrule').onclick = add; $('newrule').onkeydown = e => { if (e.key === 'Enter') add(); };
     $('skills').innerHTML = (s.skills || []).length ? s.skills.map((k, i) =>
       `<div class="row rule"><div class="t"><b>“${esc(k.say)}”</b><span>${esc(k.reply)}</span></div><button class="x" data-u="${i}" aria-label="Forget this shortcut">×</button></div>`).join('')
-      : '<div class="empty">None yet. Ask Atticus to do something; if it works, it lands here.</div>';
+      : '<div class="empty">None yet. Ask Tomo to do something; if it works, it lands here.</div>';
     document.querySelectorAll('[data-u]').forEach(b => b.onclick = () => post({ do: 'unlearn', say: s.skills[+b.dataset.u].say }));
     const m = s.me || { name: '', about: '', facts: [] };
     if (document.activeElement !== $('myname')) $('myname').value = m.name;
@@ -482,7 +482,7 @@
       P = {talkMode: 'hold', ...d.prefs}; recording = false;
       $('shortcut').classList.remove('rec'); $('change').textContent = 'Change Shortcut';
       if (d.icon) $('icon').src = $('bigicon').src = d.icon;
-      $('ver').textContent = $('aboutver').textContent = d.version ? 'Version ' + d.version : 'Voice Assistant';
+      $('ver').textContent = $('aboutver').textContent = d.version ? 'Version ' + d.version : 'Tomo';
       paint(); if (d.state) state(d.state);
     },
     rec(m) { if (recording) /^Add/.test(m) ? showCaps('', m) : showCaps(m, m ? '' : 'Press your shortcut'); },   // held modifiers, live

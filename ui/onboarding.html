@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Atticus first-run window. Atticus.swift loads this (orbs.js goes in place of the marker), calls ob.set({...}) every second
+<!-- Tomo first-run window. Atticus.swift loads this (orbs.js goes in place of the marker), calls ob.set({...}) every second
      with which permissions are on, and gets {do:'grant', id} / {do:'done'} back. -->
 <style>
   :root {
@@ -77,7 +77,7 @@
   #count { margin-top: 14px; font-size: 12px; color: var(--fg3); font-variant-numeric: tabular-nums; transition: color .3s; }
   #count.all { color: var(--green); }
 
-  /* try it: keys light up as the user holds them, then turn green once Atticus hears the hotkey */
+  /* try it: keys light up as the user holds them, then turn green once Tomo hears the hotkey */
   .keys.big { margin-top: 30px; gap: 10px; } .keys.big .key { height: 52px; min-width: 52px; font-size: 19px; border-radius: 11px; }
   .keys.big .key.wide { min-width: 160px; font-size: 15px; }
   .key.lit { transform: translateY(2px); color: #fff; background: linear-gradient(#3d9bff, var(--accent));
@@ -123,14 +123,14 @@
 <body>
 <section class="page" id="welcome">
   <div id="orbwrap" class="r"><canvas id="orb"></canvas></div>
-  <h1 class="r">Meet Atticus</h1>
+  <h1 class="r">Meet Tomo</h1>
   <p class="sub r" id="welcome-talk">Hold the shortcut, say what you need, let go. Your Mac does the rest.</p>
   <div class="keys r"><div class="key" id="k1">⌃</div><div class="key" id="k2">⌥</div><div class="key wide" id="k3">Space</div></div>
   <button class="btn r" data-go="perms">Get Started</button>
 </section>
 
 <section class="page" id="perms">
-  <h2 class="r">Give Atticus a hand</h2>
+  <h2 class="r">Give Tomo a hand</h2>
   <p class="sub r">macOS asks once for each one. You can change them any time in System Settings.</p>
   <div id="list" class="r"></div>
   <div id="count" class="r"></div>
@@ -156,7 +156,7 @@
     <div class="try">“Tell me when the timer is done”<button id="timer">Start a 20 s timer</button></div>
   </div>
   <div class="tips r"><div><kbd>esc</kbd> stops an answer</div><div>Click away to close</div></div>
-  <button class="btn r" id="finish">Start Using Atticus</button>
+  <button class="btn r" id="finish">Start Using Tomo</button>
 </section>
 
 <div id="dots"><i></i><i></i><i></i><i></i></div>
@@ -182,7 +182,7 @@
     ['speech', 'Speech Recognition', 'Turns your words into text, on this Mac.', '#8e8e93', '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>'],
     ['ax', 'Accessibility', 'Moves windows and clicks buttons for you.', '#0a84ff', '<circle cx="12" cy="4.5" r="1.6"/><path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5l-3 6M12 14.5l3 6"/>'],
     ['screen', 'Screen Recording', 'Looks at your screen when you say “this”.', '#bf5af2', '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>'],
-    ['auto', 'Automation', 'Pick the apps Atticus can control, all at once.', '#636366', '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'],
+    ['auto', 'Automation', 'Pick the apps Tomo can control, all at once.', '#636366', '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'],
   ];
   $('list').innerHTML = P.map(([id, name, why, color, svg], i) => `
     <div class="row" id="p-${id}" style="transition-delay:${.25 + i * .06}s">
@@ -213,7 +213,7 @@
       const k = KEYS[cur];
       if (!k || $(k[2]).classList.contains('yes')) return;
       k.forEach((id, i) => setTimeout(() => { $(id).classList.remove('lit', 'down'); $(id).classList.add('yes'); }, i * 70));
-      { $('hint').textContent = 'That’s it. Atticus is listening.'; $('hint').classList.add('yes'); }
+      { $('hint').textContent = 'That’s it. Tomo is listening.'; $('hint').classList.add('yes'); }
       setTimeout(() => go('done'), 1500);
     },
     plan(c) {   // Claude Code: installed, signed in, paid plan? The row says which, the button fixes it

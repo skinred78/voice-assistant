@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Atticus: a small Mac helper run by Claude Haiku through the Claude Code CLI (your Claude plan). Idea from Caleb Writes Code's "Atticus".
+"""Tomo: a small Mac helper run by Claude Haiku through the Claude Code CLI (your Claude plan).
+Based on Atticus by SaarthurR (MIT), whose idea came from Caleb Writes Code's "Atticus".
 
-Hold Control+Option+Space (Atticus.app) -> talk -> let go. It answers questions (web, files, screen) and does
+Hold Control+Option+Space (Tomo.app) -> talk -> let go. It answers questions (web, files, screen) and does
 tasks on the Mac. Output lines for the overlay: "· note", "▸ step", "✓ answer".
   atticus.py "what's on my screen?"      run one request (no args = a typed pop-up, used by the SwiftBar menu)
   atticus.py --place <proc> <left|right|full|center> <laptop|monitor|current> [title]
@@ -15,21 +16,21 @@ tasks on the Mac. Output lines for the overlay: "· note", "▸ step", "✓ answ
   atticus.py --search <query>  |  --read <url>   free web search (DuckDuckGo) / one page as plain text
   atticus.py --watch <app> "<title words>" <gone|shows> "<phrase>" ["<request>"]   watch a window in the background, no AI, then notify (and run the request)
   atticus.py --pick "<question>" <option>...   the user picks one in the box (files get a preview) -> prints it
-  atticus.py --set "<setting name>" on|off   flip one of Atticus's own switches (not safe mode or pause), no clicks
+  atticus.py --set "<setting name>" on|off   flip one of Tomo's own switches (not safe mode or pause), no clicks
   atticus.py --unwatch                    stop every watch  |  --budget   is real use still under the cost and speed budget?
-Completed requests go to ~/.config/voice-assistant/log.jsonl with their cost (live actions are marked).
+Completed requests go to ~/.config/tomo/log.jsonl with their cost (live actions are marked).
 """
-import atexit, base64, html, json, shutil, threading, os, re, signal, subprocess, sys, tempfile, time, urllib.parse, urllib.request
+import atexit, base64, calendar, html, json, shutil, threading, os, re, signal, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 
 HOME = os.path.expanduser('~')
-DIR = os.environ.get('ATTICUS_DIR') or os.path.join(HOME, '.config/voice-assistant')   # ATTICUS_DIR: tests keep off the user's chat and rules
-ME = os.path.abspath(__file__)   # inside Atticus.app once built, so the AI's helper commands point here
+DIR = os.environ.get('ATTICUS_DIR') or os.path.join(HOME, '.config/tomo')   # ATTICUS_DIR: tests keep off the user's chat and rules
+ME = os.path.abspath(__file__)   # inside Tomo.app once built, so the AI's helper commands point here
 PLACE, LOOK, SEARCH, READ, SHOW, REMEMBER, FORGET, TYPE, PLAY, ABOUT, SHORTCUT, FRONT, WATCH, PICK, SET = (ME + f' --{c}' for c in ('place', 'look', 'search', 'read', 'show', 'remember', 'forget', 'type', 'play', 'me add', 'shortcut', 'front', 'watch', 'pick', 'set'))
 MEMORY, RECENT = os.path.join(DIR, 'memory.md'), os.path.join(DIR, 'recent.jsonl')
 PREFS = os.path.join(DIR, 'settings.json')   # written by the Settings window
 
 
-# About the user: name, one line they wrote, up to 8 short facts Atticus picked up. Capped at 300 characters
+# About the user: name, one line they wrote, up to 8 short facts Tomo picked up. Capped at 300 characters
 # (~75 tokens, ~0.008¢ an ask) so knowing them never gets expensive. One writer: this file's --me commands.
 ME_FILE = os.path.join(DIR, 'me.json')
 
@@ -63,12 +64,12 @@ def pref(key, default):
     try:
         return json.load(open(PREFS)).get(key, default)
     except (OSError, ValueError):
-        return default   # recent: Atticus.app deletes it on ✕
+        return default   # recent: Tomo.app deletes it on ✕
 SHOT = '/tmp/atticus-screen'   # + -<n>.jpg, one per display
 os.environ['PATH'] = f"/opt/homebrew/bin:/usr/local/bin:{HOME}/.local/bin:{HOME}/.claude/local:/usr/bin:/bin:/usr/sbin:" + os.environ.get('PATH', '')
-APP = os.environ.get('ATTICUS_APP') or os.path.join(HOME, 'Applications/VoiceAssistant.app/Contents/MacOS/VoiceAssistant')   # set by Atticus.app
+APP = os.environ.get('ATTICUS_APP') or os.path.join(HOME, 'Applications/Tomo.app/Contents/MacOS/Tomo')   # set by Tomo.app
 
-SYSTEM = f"""You are Atticus, a Mac helper. The user holds a hotkey, talks, lets go; your reply shows in a small box on the user's screen.
+SYSTEM = f"""You are Tomo, a Mac helper. The user holds a hotkey, talks, lets go; your reply shows in a small box on the user's screen.
 Requests are questions (find the answer and give it), tasks (do it on the Mac), or both ("find this author's bio on Google and open it" = look at the screen, search, open the best page).
 Speed matters; every extra round costs the user a second. Answer stable facts without a tool. For current facts (news, prices, schedules, weather), search once and prefer a dated primary source. Never invent details missing from the screen or search results. Do the whole task in ONE Bash call when you can (chain with ;). Need several things? Ask for them all in the same turn, not one after another.
 Before EACH tool call write a 3-8 word note of what you are doing; it shows live. Plain words only, never tool or command names (no peekaboo, screenshot, osascript): "Looking at your screen", "Clicking Play".
@@ -95,7 +96,7 @@ Tools:
 Earlier: the last few questions from the past 5 minutes, if any; use them for follow-ups ("open the second one", "and tomorrow?").
 Memory: the user's saved rules come under "Memory:" in the request; follow them. When the user says remember / from now on, save ONE short line with {REMEMBER} "<rule>". When the user says forget, run {FORGET} "<words from that line>".
 Shortcuts: "when I say X, open/do Y" or "make X a command" where Y is fixed actions (open apps, sites, files): run Y once, then save it with {SHORTCUT} "<X>" '<the one shell command>' (chain with ;). It then runs instantly with no AI; it is not a rule. A rule that is really a command: save the shortcut, then {FORGET} the rule.
-Atticus's own switches (tips, read aloud, ask me when unsure…): {SET} "<setting name>" on|off, never click in Settings. Show Settings: open -a Atticus
+Tomo's own switches (tips, read aloud, ask me when unsure…): {SET} "<setting name>" on|off, never click in Settings. Show Settings: open -a Tomo
 Corrections: when the user says "no, I meant…", fix it, then save ONE short rule with {REMEMBER} so it won't happen again.
 Rules: "this", "it", "here" mean the front app/window in Context. Process names can differ from app names (VS Code is "Code").
 NEVER_RISKY
@@ -283,7 +284,7 @@ def describe(scr, fx=None):
 
 
 def front():
-    # Atticus.app passes the app the user was in when the user pressed the keys (its own windows can take focus, e.g. onboarding)
+    # Tomo.app passes the app the user was in when the user pressed the keys (its own windows can take focus, e.g. onboarding)
     app = os.environ.get('ATTICUS_FRONT') or osa('tell application "System Events" to get name of first process whose frontmost is true')
     return app, osa(f'tell application "System Events" to tell process "{app}" to get name of front window')
 
@@ -458,8 +459,8 @@ def proc_of(app):
 
 
 def plain(text):
-    """Spoken request -> its core words: "Hey Atticus, can you open Spotify please?" -> "open spotify"."""
-    t = re.sub(r"^(hey |ok |okay )?(atticus,? )?(please |can you |could you |would you )?", '', text.lower().strip(' .!?'))
+    """Spoken request -> its core words: "Hey Tomo, can you open Spotify please?" -> "open spotify"."""
+    t = re.sub(r"^(hey |ok |okay )?(tomo,? )?(please |can you |could you |would you )?", '', text.lower().strip(' .!?'))
     t = re.sub(r'^(also |and |now |then )+', '', re.sub(r'\s+please$', '', t))
     return re.sub(r'[,;!?]|:(?!//)|(?<!\w)\.|\.(?!\w)', '', t)   # keep domain dots; speech also adds punctuation
 
@@ -518,6 +519,175 @@ def replay(k):
     return s['reply']
 
 
+# Instant file search: Spotlight, no AI ("find my budget spreadsheet", "where is the Tokyo deck", "open my invoice file",
+# "find pricing in Obsidian"). Names that match come first, then most recently used. One hit opens; several show the choices card.
+KINDS = {'deck': ('.pptx', '.ppt', '.key', '.pdf'), 'slides': ('.pptx', '.ppt', '.key', '.pdf'), 'presentation': ('.pptx', '.ppt', '.key', '.pdf'),
+         'spreadsheet': ('.xlsx', '.xls', '.csv', '.numbers'), 'sheet': ('.xlsx', '.xls', '.csv', '.numbers'), 'pdf': ('.pdf',),
+         'doc': ('.docx', '.doc', '.pages', '.pdf', '.md', '.txt', '.rtf'), 'document': ('.docx', '.doc', '.pages', '.pdf', '.md', '.txt', '.rtf'),
+         'note': ('.md', '.txt'), 'notes': ('.md', '.txt'), 'folder': 'dir', 'file': None, 'files': None, 'documents': None, 'docs': None}
+FILLER = {'my', 'the', 'a', 'an', 'me', 'called', 'named', 'about', 'on', 'for', 'with', 'that', 'which', 'is', 'was', 'i', 'of', 'from', 'some'}
+FILE_ASK = re.compile(r'(?:find|locate|where is|where\'s|wheres|where did i (?:put|save))\s+(?:me\s+)?(.+)'
+                      r'|(?:open|pull up|bring up|show me)\s+((?:my|the)\s+.+\s(?:' + '|'.join(KINDS) + r'))')
+VAULT_ASK = re.compile(r'(?:find|search(?: for)?|look for|look up)\s+(.+?)\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:obsidian(?: vault)?|vault)')
+FOUND = 'found.json'   # in DIR: the last files listed, so "open the second one" needs no AI
+ORDINAL = {w: i for i, ws in enumerate((('first', '1st', 'top', 'one'), ('second', '2nd', 'two'), ('third', '3rd', 'three'),
+                                        ('fourth', '4th', 'four'), ('fifth', '5th', 'five'))) for w in ws}
+
+
+def spotlight(words, root=HOME, kinds=None, most=5):
+    """mdfind for every word, in names and contents -> up to `most` paths, names that match first, then most recently used."""
+    try:
+        out = subprocess.run(['mdfind', '-onlyin', root, ' '.join(words)], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    skip = re.compile(r'/(Library|node_modules|\.Trash)/|/\.|\.(app|photoslibrary|bundle|framework)/')
+    paths = [p for p in out.splitlines()[:3000] if p and not skip.search(p[len(root):])]
+    if kinds == 'dir':
+        paths = [p for p in paths if os.path.isdir(p)]
+    elif kinds:
+        paths = [p for p in paths if p.lower().endswith(kinds)] or paths   # "the Tokyo deck" may be a PDF we didn't guess
+    named = lambda p: all(w in os.path.basename(p).lower() for w in words)
+    paths = sorted(paths, key=lambda p: not named(p))[:200]
+    used = {}
+    try:   # one mdls call for all of them; -raw separates values with NUL
+        vals = subprocess.run(['mdls', '-raw', '-name', 'kMDItemLastUsedDate', *paths], capture_output=True, text=True, timeout=3).stdout.split('\0')
+        for p, v in zip(paths, vals):
+            if v[:4].isdigit():
+                used[p] = calendar.timegm(time.strptime(v[:19], '%Y-%m-%d %H:%M:%S'))
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+    def when(p):
+        try:
+            return used.get(p) or os.path.getmtime(p)
+        except OSError:
+            return 0
+    return sorted(paths, key=lambda p: (not named(p), -when(p)))[:most]
+
+
+def choose(question, paths):
+    """The choices card (or a list dialog when there is no box) with no AI behind it -> the index picked, or None."""
+    if not pref('askMe', True):
+        return 0   # Settings → Ask me when unsure is off: take the best match
+    if os.environ.get('ATTICUS_UI') != '1':
+        r = osa('on run argv\nset r to choose from list (rest of argv) with prompt (item 1 of argv)\nif r is false then return ""\nreturn item 1 of r\nend run',
+                question, *[p.replace(HOME, '~', 1) for p in paths])
+        return next((i for i, p in enumerate(paths) if p.replace(HOME, '~', 1) == r), None)
+    d = tempfile.mkdtemp(prefix='atticus-pick-')
+    a, parent = os.path.join(d, 'a'), os.getppid()
+    try:
+        print('◇ ' + json.dumps({'q': question, 'options': choices(paths), 'a': a}), flush=True)
+        for _ in range(1100):   # the AI's card waits 110 s too
+            if os.path.exists(a) or os.getppid() != parent:   # parent gone: the ask was cancelled
+                break
+            time.sleep(0.1)
+        s = open(a).read().strip() if os.path.exists(a) else ''
+    finally:
+        shutil.rmtree(d, True)
+    return int(s) if s.isdigit() and int(s) < len(paths) else None
+
+
+def open_found(path, reveal=False, vault=''):
+    if vault and path.endswith('.md'):   # a vault note opens in Obsidian itself
+        subprocess.run(['open', 'obsidian://open?path=' + urllib.parse.quote(path)])
+    elif reveal:
+        subprocess.run(['open', '-R', path])   # "where is": show it in Finder
+    elif pref('openOn', 'here') == 'other':
+        show(path)
+    else:
+        subprocess.run(['open', path])
+    name = os.path.basename(path.rstrip('/'))
+    return f'{name} is in {os.path.dirname(path).replace(HOME, "~", 1)}.' if reveal else f'Opened {name}.'
+
+
+def find_files(t):
+    """"find my budget spreadsheet" and the like -> a reply, or None (nothing asked for, or nothing found: the AI tries)."""
+    vm, m = VAULT_ASK.fullmatch(t), FILE_ASK.fullmatch(t)
+    vault = os.path.expanduser(pref('vault', '~/obsidian-vault')) if vm else ''
+    ask = vm[1] if vm else m and (m[1] or m[2])
+    if not ask or (m and m[1] and not vm and not re.search(r'\b(my|called|named)\b|\b(' + '|'.join(KINDS) + r')\b', ask)):
+        return None   # "find a good cafe" is not a file search
+    if vault and not os.path.isdir(vault):
+        return None
+    words = ask.split()
+    kinds = next((KINDS[w] for w in reversed(words) if KINDS.get(w)), None)
+    words = [w for w in words if w not in FILLER and w not in KINDS]
+    if not words:
+        return None
+    hits = spotlight(words, vault or HOME, ('.md',) if vault else kinds)
+    if not hits:
+        return None
+    os.makedirs(DIR, exist_ok=True)
+    json.dump({'t': time.time(), 'paths': hits, 'vault': vault}, open(os.path.join(DIR, FOUND), 'w'))
+    reveal = bool(m and m[1] and re.match(r'where', t))
+    i = 0 if len(hits) == 1 else choose(f'Which {" ".join(words)}?', hits)
+    if i is None:
+        return 'Found ' + '; '.join(f'{n}. {os.path.basename(p.rstrip("/"))}' for n, p in enumerate(hits, 1)) + '. Say "open the second one" to open one.'
+    return open_found(hits[i], reveal, vault)
+
+
+def open_nth(t):
+    """"open the second one" right after a file search."""
+    m = re.fullmatch(r'(?:open|show me|show)?\s*(?:the\s+|number\s+)?(\w+)(?:\s+(?:one|file|result|document))?', t)
+    found = os.path.join(DIR, FOUND)
+    if not m or m[1] not in ORDINAL or not os.path.exists(found) or time.time() - os.path.getmtime(found) > 600:
+        return None
+    try:
+        f = json.load(open(found))
+        return open_found(f['paths'][ORDINAL[m[1]]], vault=f.get('vault', ''))
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+
+
+# Voice capture into Obsidian, no AI: "note that …", "capture …", "remind me to …" -> a timestamped bullet under ## Capture
+# in today's daily note, the words as spoken. Append only: nothing else in the note changes. No note today: the voice inbox.
+CAPTURE = re.compile(r'^\s*(?:(?:hey|ok|okay)[,\s]+)?(?:tomo[,\s]+)?(?:(?:please|can you|could you)\s+)?'
+                     r'(?:(?:note that|note|capture|take a note(?: that)?|jot down)\b[\s,:-]*|(?=remind me to\b))(.*?)\s*$', re.I | re.S)
+INBOX = 'CMO/_capture/voice-inbox.md'
+
+
+def capture(text):
+    """-> a reply once saved, or None when it is not a capture (or only "note this": the screen, so the AI)."""
+    m = CAPTURE.match(text)
+    words = ' '.join(m[1].split()) if m else ''
+    if re.fullmatch(r'((this|that|it|these|those)( down| for me)?)?', words.lower().strip(' .,!?')):
+        return None
+    vault = os.path.expanduser(pref('vault', '~/obsidian-vault'))
+    day, now = time.strftime('%Y-%m-%d'), time.strftime('%H:%M')
+    if not os.path.isdir(vault):   # never lose the words
+        os.makedirs(DIR, exist_ok=True)
+        with open(os.path.join(DIR, 'captures.md'), 'a', encoding='utf-8') as f:
+            f.write(f'- {day} {now} {words}\n')
+        return f'No Obsidian vault at {vault.replace(HOME, "~", 1)}, so I saved it in {DIR.replace(HOME, "~", 1)}/captures.md.'
+    note = os.path.join(vault, pref('dailyNotes', 'Daily Notes'), day + '.md')
+    if os.path.isfile(note):
+        add_under_capture(note, f'- {now} {words}')
+        return 'Noted in today\'s daily note.'
+    inbox = os.path.join(vault, INBOX)
+    os.makedirs(os.path.dirname(inbox), exist_ok=True)
+    with open(inbox, 'a', encoding='utf-8') as f:
+        f.write(f'- {day} {now} {words}\n')
+    return f'Today\'s daily note isn\'t there yet, so it went to {INBOX}.'
+
+
+def add_under_capture(path, line):
+    """Insert the line at the end of the ## Capture section (adding the section at the end if the note has none)."""
+    text = open(path, encoding='utf-8').read()
+    lines = text.split('\n')
+    i = next((n for n, l in enumerate(lines) if re.fullmatch(r'##\s+Capture\s*', l)), None)
+    if i is None:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(('' if text.endswith('\n') or not text else '\n') + ('\n' if text.strip() else '') + f'## Capture\n{line}\n')
+        return
+    end = next((n for n in range(i + 1, len(lines)) if re.match(r'#{1,2}\s', lines[n])), len(lines))
+    while end > i + 1 and not lines[end - 1].strip():   # after the last bullet, not after the blank lines before the next heading
+        end -= 1
+    lines.insert(end, line)
+    tmp = path + '.tomo-tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    os.replace(tmp, path)   # whole or not at all: Obsidian never sees half a note
+
+
 def fast(text):
     """Simple commands with no AI: learned shortcuts, open <app/site>, snap/move <it/app> left/right/full/center, to laptop/monitor.
     Returns a reply, or None to hand the request to Haiku."""
@@ -528,6 +698,10 @@ def fast(text):
         if os.environ.get('ATTICUS_LIVE') == '1':
             return None   # even a shortcut named "open Spotify" waits for confirmed words
         r = replay(t)
+        if r:
+            return r
+    if os.environ.get('ATTICUS_LIVE') != '1':   # files and notes wait for the whole sentence
+        r = capture(text) or open_nth(t) or find_files(t)
         if r:
             return r
     m = re.fullmatch(r'(?:search(?: up)?|google|look up)(?: for)? (.+?)(?: (?:on|in) (google|chrome|safari|youtube|spotify|amazon|the web))?', t)
@@ -596,7 +770,7 @@ def look():
         os.close(fd)
         os.remove(path)
         atexit.register(lambda: os.path.exists(path) and os.remove(path))
-        # Atticus.app takes it, leaving its own box out; plain screencapture is the fallback (box included)
+        # Tomo.app takes it, leaving its own box out; plain screencapture is the fallback (box included)
         if subprocess.run([APP, '--look', str(i), path], capture_output=True).returncode:
             subprocess.run(['screencapture', '-x', '-D', str(i), '-t', 'jpg', path])
             subprocess.run(['sips', '-Z', '1280', '-s', 'formatOptions', '70', path], capture_output=True)
@@ -699,7 +873,7 @@ BUDGET = {'usd': 0.002, 'secs': 6}   # median of the last 50 AI asks must stay u
 
 
 def notify(text):
-    osa('on run argv\ndisplay notification (item 1 of argv) with title "Atticus" sound name "Glass"\nend run', text)
+    osa('on run argv\ndisplay notification (item 1 of argv) with title "Tomo" sound name "Glass"\nend run', text)
 
 
 def watch(what, then, app='', words='', mode='', phrase=''):
@@ -735,11 +909,11 @@ def log_turn(task, reply, started, cost=0, steps=0, ran=()):
                             'ran': list(ran), 'live': os.environ.get('ATTICUS_LIVE') == '1'}) + '\n')
 
 
-TIPS = ['Say "remember …" and Atticus keeps it as a rule.',
+TIPS = ['Say "remember …" and Tomo keeps it as a rule.',
         'Say "when I say study mode, open …" to make your own instant command.',
         'Ask "where do I click to …" and a ring marks the spot.',
         'Tap the shortcut to type instead of talk.']
-MISS = 'Saying the same thing more than once? Tell Atticus how you want it done. It remembers next time.'
+MISS = 'Saying the same thing more than once? Tell Tomo how you want it done. It remembers next time.'
 
 
 def tip(reply, taught=''):
@@ -760,7 +934,7 @@ def tip(reply, taught=''):
 
 
 def plan():
-    """Can Atticus think? Claude Code must be installed and signed in to a paid Claude plan (or an API key).
+    """Can Tomo think? Claude Code must be installed and signed in to a paid Claude plan (or an API key).
     -> {'ok': bool, 'need': '' | 'install' | 'login' | 'upgrade', 'text': one line for the user}"""
     try:
         s = json.loads(subprocess.run(['claude', 'auth', 'status'], capture_output=True, text=True, timeout=20).stdout)
@@ -774,7 +948,7 @@ def plan():
         return {'ok': True, 'need': '', 'text': 'Using your Anthropic API key (billed per use).'}
     sub = (s.get('subscriptionType') or '').lower()
     if sub in ('', 'free'):
-        return {'ok': False, 'need': 'upgrade', 'text': 'Atticus needs a paid Claude plan (Pro or Max).'}
+        return {'ok': False, 'need': 'upgrade', 'text': 'Tomo needs a paid Claude plan (Pro or Max).'}
     return {'ok': True, 'need': '', 'text': f'Using your Claude {sub.title()} plan.'}
 
 
@@ -853,8 +1027,8 @@ def run(task, p=None, shots=()):
     run.ok = False
     p = p or start_claude()
     if not p:
-        say('!', 'setup')   # Atticus.app opens its setup window
-        return plan()['text'] + ' Atticus setup is open to fix it.', 0, []
+        say('!', 'setup')   # Tomo.app opens its setup window
+        return plan()['text'] + ' Tomo setup is open to fix it.', 0, []
     content = [b for path, label in shots if os.path.exists(path) for b in ({'type': 'text', 'text': label}, {'type': 'image', 'source': {
         'type': 'base64', 'media_type': 'image/jpeg', 'data': base64.b64encode(open(path, 'rb').read()).decode()}})] + [{'type': 'text', 'text': task}]
     p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': content}}) + '\n')
@@ -890,7 +1064,7 @@ def run(task, p=None, shots=()):
         if not c['ok']:
             say('!', 'setup')
         p.errors.seek(0)
-        reply = c['text'] + ' Atticus setup is open to fix it.' if not c['ok'] else f'Claude failed: {p.errors.read(200)}'
+        reply = c['text'] + ' Tomo setup is open to fix it.' if not c['ok'] else f'Claude failed: {p.errors.read(200)}'
     run.cmds = [] if failed or result_error or p.returncode or not completed or not reply else cmds
     run.ok = bool(completed and reply and not result_error and not p.returncode)
     return reply or 'No answer came back. Please try again.', cost, steps
@@ -964,7 +1138,7 @@ def remember_turn(q, a):
 
 def ask():
     out = osa('tell application "System Events"\nactivate\nset r to display dialog "What should I do?" default answer "" '
-              'buttons {"Cancel", "Go"} default button "Go" with title "Atticus"\nreturn text returned of r\nend tell')
+              'buttons {"Cancel", "Go"} default button "Go" with title "Tomo"\nreturn text returned of r\nend tell')
     return out.strip()
 
 
@@ -1015,7 +1189,7 @@ def main():
         from concurrent.futures import ThreadPoolExecutor
         return print('\n'.join(ThreadPoolExecutor(len(moves) or 1).map(lambda m: place(*m), moves)))
     if args == ['--look']:
-        return print('\n'.join(f'{label}: {path}' for path, label in look()) or 'no screenshot: allow Atticus in Screen Recording (System Settings)')
+        return print('\n'.join(f'{label}: {path}' for path, label in look()) or 'no screenshot: allow Tomo in Screen Recording (System Settings)')
     if args[:1] == ['--front'] and len(args) > 1:   # "show me where" on an app or tab the user isn't looking at
         app, words = args[1], ' '.join(args[2:])
         osa(f'tell application "{app}" to activate')
@@ -1028,7 +1202,7 @@ def main():
                 f'if ({name} of t contains item 1 of argv) or (URL of t contains item 1 of argv) then\n{set_tab}\nset index of w to 1\nreturn\n'
                 'end if\nend repeat\nend repeat\nend tell\nend run', words)
         time.sleep(0.5)   # the window draws before the picture
-        return print('\n'.join(f'{label}: {path}' for path, label in look()) or 'no screenshot: allow Atticus in Screen Recording (System Settings)')
+        return print('\n'.join(f'{label}: {path}' for path, label in look()) or 'no screenshot: allow Tomo in Screen Recording (System Settings)')
     if args[:1] == ['--type']:   # paste into the focused field of the user's app, then put the user's clipboard back
         app, text = front()[0], ' '.join(args[1:])
         old = subprocess.run(['pbpaste'], capture_output=True).stdout
@@ -1037,7 +1211,7 @@ def main():
                             '-e', 'tell application "System Events" to keystroke "v" using command down'], capture_output=True, text=True)
         time.sleep(0.4)
         subprocess.run(['pbcopy'], input=old)
-        return print(f'typed into {app}' if not r.returncode else f'could not type: {r.stderr.strip()} (allow Atticus in Accessibility)')
+        return print(f'typed into {app}' if not r.returncode else f'could not type: {r.stderr.strip()} (allow Tomo in Accessibility)')
     if args[:1] == ['--show']:
         return print(show(' '.join(args[1:])))
     if args[:1] == ['--remember']:
@@ -1099,7 +1273,7 @@ def main():
             return print(text_of(get(args[1]))[:5000])   # ~1.2K tokens: enough for an answer, cheap to read
         except Exception as e:
             return print(f'could not read: {e}')
-    warm = start_claude() if args == ['--wait'] else None   # Atticus.app: started at key-down, request comes on stdin at release
+    warm = start_claude() if args == ['--wait'] else None   # Tomo.app: started at key-down, request comes on stdin at release
     shots = []
     snap = threading.Thread(target=lambda: shots.extend(look()), daemon=True)   # the screen as the user pressed the keys; sent only if the words are about it
     snap.shots = shots
@@ -1133,11 +1307,11 @@ def main():
     ctx = (f'About the user: {you} ' if you else '') + f'Front app: {app}. Front window: {win or "?"}.' + (f' Page: {url}.' if url else '') + f' Screens: {scr}. Now: {time.strftime("%a %b %d %Y %I:%M %p")}.'
     mem = relevant_rules(task)
     turns = recent()
-    turns = [r for r in turns if time.time() - r['t'] < 600][-3:]   # this chat only (Atticus.app clears it for a new one); 10 min cap for typed asks
+    turns = [r for r in turns if time.time() - r['t'] < 600][-3:]   # this chat only (Tomo.app clears it for a new one); 10 min cap for typed asks
     earlier = ''.join(f'Q: {r["q"]}\nA: {r["a"][:300]}\n' for r in turns)
     images = screen_for(task, snap, fx)
     if images == []:
-        ctx += ' Screen capture unavailable. Do not guess screen contents; explain how to enable Screen Recording for Atticus.'
+        ctx += ' Screen capture unavailable. Do not guess screen contents; explain how to enable Screen Recording for Tomo.'
     reply, cost, steps = run(f'Context: {ctx}\n' + (f'Earlier:\n{earlier}' if earlier else '') +
                       (f'Memory:\n{mem}\n' if mem else '') + f'Request: {task}', warm, images or ())
     if not wait_commit():
@@ -1160,7 +1334,7 @@ def main():
     learned = [r for c in run.ran for r in re.findall(r'--remember\s+["\']([^"\']+)', c)]   # it taught itself: say so, so the user sees it improve
     tip(reply, f'Learned: {learned[-1]}' if learned else taught[1].strip() if taught else '')
     if os.environ.get('ATTICUS_UI') != '1':   # typed from the menu bar: no overlay, so a notification
-        osa('on run argv\ndisplay notification (item 1 of argv) with title "Atticus"\nend run', reply)
+        osa('on run argv\ndisplay notification (item 1 of argv) with title "Tomo"\nend run', reply)
 
 
 if __name__ == '__main__':
@@ -1181,7 +1355,7 @@ if __name__ == '__main__':
         assert label('Bash', {'command': "osascript -e 'tell application \"Music\" to playpause'"}) == 'Using Music'
         assert app_named('the trading view application') == 'TradingView'
         assert screen_for('open spotify', None) is None   # no screen words: no picture, no wait
-        assert plain('Hey Atticus, can you open Spotify please?') == plain('Can you also open Spotify?') == 'open spotify'
+        assert plain('Hey Tomo, can you open Spotify please?') == plain('Can you also open Spotify?') == 'open spotify'
         SKILLS = os.path.join(tempfile.mkdtemp(), 'skills.json')
         learn('Can you put Notes on the left?', [f'{PLACE} "Notes" left current'], 'Notes is on the left.')
         learn('close this', ['osascript -e x'], 'x')                       # "this": never learned

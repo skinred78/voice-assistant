@@ -315,5 +315,129 @@ class WatchAndBudgetTests(unittest.TestCase):
         self.assertLessEqual(len(full.replace(atticus.ME, 'atticus.py')), 10000)
 
 
+class CaptureTests(unittest.TestCase):
+    """Voice notes land under ## Capture in today's daily note, words untouched, nothing else changed."""
+    def setUp(self):
+        root = tempfile.TemporaryDirectory()
+        self.addCleanup(root.cleanup)
+        self.vault, self.dir = Path(root.name) / 'vault', Path(root.name) / 'config'
+        (self.vault / 'Daily Notes').mkdir(parents=True)
+        for p in (patch.object(atticus, 'DIR', str(self.dir)),
+                  patch.object(atticus, 'pref', side_effect=lambda k, d: {'vault': str(self.vault)}.get(k, d)),
+                  patch.object(atticus.time, 'strftime', side_effect=lambda f, *a, real=time.strftime: {'%Y-%m-%d': '2026-10-12', '%H:%M': '09:30'}.get(f) or real(f, *a))):
+            p.start()
+            self.addCleanup(p.stop)
+        self.note = self.vault / 'Daily Notes' / '2026-10-12.md'
+
+    def test_appends_at_the_end_of_the_capture_section_only(self):
+        self.note.write_text('# 12 Oct\n\n## Capture\n- 08:00 earlier\n\n## Tasks (auto)\n- [ ] x\n')
+        self.assertEqual(atticus.capture('Note that the Tokyo deck needs the new pricing, and Claude, leave this for me.'), "Noted in today's daily note.")
+        self.assertEqual(self.note.read_text(), '# 12 Oct\n\n## Capture\n- 08:00 earlier\n'
+                         '- 09:30 the Tokyo deck needs the new pricing, and Claude, leave this for me.\n\n## Tasks (auto)\n- [ ] x\n')
+
+    def test_capture_as_last_section_and_missing_section(self):
+        self.note.write_text('## Capture\n')
+        atticus.capture('capture: ring Kenji about Weave')
+        self.assertEqual(self.note.read_text(), '## Capture\n- 09:30 ring Kenji about Weave\n')
+        self.note.write_text('# Day\nText')
+        atticus.capture('Hey Tomo, remind me to email Scribendi')
+        self.assertEqual(self.note.read_text(), '# Day\nText\n\n## Capture\n- 09:30 remind me to email Scribendi\n')
+
+    def test_no_daily_note_goes_to_the_voice_inbox(self):
+        self.assertIn('voice-inbox.md', atticus.capture('Note that Edanz renewal is Friday'))
+        self.assertEqual((self.vault / atticus.INBOX).read_text(), '- 2026-10-12 09:30 Edanz renewal is Friday\n')
+        self.assertFalse(self.note.exists())
+
+    def test_no_vault_keeps_the_words(self):
+        with patch.object(atticus, 'pref', side_effect=lambda k, d: {'vault': str(self.vault / 'missing')}.get(k, d)):
+            self.assertIn('captures.md', atticus.capture('note that x y'))
+        self.assertEqual((self.dir / 'captures.md').read_text(), '- 2026-10-12 09:30 x y\n')
+
+    def test_not_a_capture(self):
+        for text in ['note this', 'Note that.', 'open Notes', 'notion', 'what are my notes about', 'remind me at 3 to call']:
+            self.assertIsNone(atticus.capture(text), text)
+
+    def test_fast_captures_only_confirmed_words(self):
+        self.note.write_text('## Capture\n')
+        with patch.object(atticus, 'skills', return_value={}):
+            with patch.dict(os.environ, {'ATTICUS_LIVE': '1'}):
+                self.assertIsNone(atticus.fast('note that half a sentence'))
+            self.assertEqual(atticus.fast('Note that the whole sentence.'), "Noted in today's daily note.")
+        self.assertEqual(self.note.read_text(), '## Capture\n- 09:30 the whole sentence.\n')
+
+
+class FileSearchTests(unittest.TestCase):
+    """Spotlight with no AI: names first, then most recently used; one hit opens, several go to the card."""
+    def setUp(self):
+        root = tempfile.TemporaryDirectory()
+        self.addCleanup(root.cleanup)
+        self.root = Path(root.name)
+        for p in (patch.object(atticus, 'DIR', str(self.root / 'config')), patch.object(atticus, 'pref', side_effect=lambda k, d: d),
+                  patch.object(atticus, 'skills', return_value={})):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_ranks_names_first_then_last_used_and_skips_library(self):
+        home = str(self.root)
+        found = [f'{home}/a/notes.txt', f'{home}/Library/Caches/budget.xlsx', f'{home}/b/Budget March.xlsx',
+                 f'{home}/c/Budget old.xlsx', f'{home}/.hidden/budget.xlsx']
+        def run(cmd, **_):
+            if cmd[0] == 'mdfind':
+                return unittest.mock.Mock(stdout='\n'.join(found))
+            used = {'Budget March.xlsx': '2026-10-01 10:00:00 +0000', 'Budget old.xlsx': '2026-10-10 10:00:00 +0000'}
+            return unittest.mock.Mock(stdout='\0'.join(used.get(os.path.basename(p), '(null)') for p in cmd[4:]))
+        with patch.object(atticus.subprocess, 'run', side_effect=run) as r, patch.object(atticus.os.path, 'getmtime', return_value=0):
+            hits = atticus.spotlight(['budget'], home, atticus.KINDS['spreadsheet'])
+        self.assertEqual(r.call_args_list[0].args[0], ['mdfind', '-onlyin', home, 'budget'])
+        self.assertEqual(hits, [f'{home}/c/Budget old.xlsx', f'{home}/b/Budget March.xlsx'])
+
+    def test_requests_that_are_and_are_not_file_searches(self):
+        with patch.object(atticus, 'spotlight', return_value=[]) as sp, \
+             patch.object(atticus, 'pref', side_effect=lambda k, d: {'vault': str(self.root)}.get(k, d)):
+            for t in ['find my budget spreadsheet', 'where is the tokyo deck', 'open my invoice file', 'find pricing in obsidian']:
+                self.assertIsNone(atticus.find_files(t))   # nothing found: the AI gets it
+            self.assertEqual([c.args[0] for c in sp.call_args_list], [['budget'], ['tokyo'], ['invoice'], ['pricing']])
+            self.assertEqual(sp.call_args_list[0].args[2], atticus.KINDS['spreadsheet'])
+            sp.reset_mock()
+            for t in ['find a good cafe nearby', 'open my notes', 'open spotify', 'search the weather', 'where is the nearest station']:
+                self.assertIsNone(atticus.find_files(t))
+            sp.assert_not_called()
+
+    def test_one_hit_opens_several_ask_then_second_one_opens(self):
+        a, b = str(self.root / 'Budget.xlsx'), str(self.root / 'Budget 2.xlsx')
+        with patch.object(atticus.subprocess, 'run') as run:
+            with patch.object(atticus, 'spotlight', return_value=[a]):
+                self.assertEqual(atticus.fast('Find my budget spreadsheet.'), 'Opened Budget.xlsx.')
+            self.assertEqual(run.call_args.args[0], ['open', a])
+            with patch.object(atticus, 'spotlight', return_value=[a, b]), patch.object(atticus, 'choose', return_value=None):
+                self.assertIn('2. Budget 2.xlsx', atticus.fast('find my budget spreadsheet'))
+            self.assertEqual(atticus.fast('open the second one'), 'Opened Budget 2.xlsx.')
+            self.assertEqual(run.call_args.args[0], ['open', b])
+            with patch.object(atticus, 'spotlight', return_value=[a, b]), patch.object(atticus, 'choose', return_value=0):
+                self.assertEqual(atticus.fast('where is my budget'), f'Budget.xlsx is in {self.root}.')
+            self.assertEqual(run.call_args.args[0], ['open', '-R', a])
+
+    def test_live_words_never_search(self):
+        with patch.dict(os.environ, {'ATTICUS_LIVE': '1'}), patch.object(atticus, 'spotlight') as sp:
+            atticus.fast('find my budget spreadsheet')
+            sp.assert_not_called()
+
+    def test_card_answer_comes_back_as_an_index(self):
+        a, b = str(self.root / 'x.pdf'), str(self.root / 'y.pdf')
+        def answer():
+            for _ in range(50):
+                line = out.getvalue()
+                if line.startswith('◇ '):
+                    Path(json.loads(line[2:])['a']).write_text('1')
+                    return
+                time.sleep(0.02)
+        out = io.StringIO()
+        with patch.dict(os.environ, {'ATTICUS_UI': '1'}), patch('sys.stdout', out), patch.object(atticus, 'choices', side_effect=lambda p: p):
+            t = threading.Thread(target=answer)
+            t.start()
+            self.assertEqual(atticus.choose('Which x?', [a, b]), 1)
+            t.join()
+
+
 if __name__ == '__main__':
     unittest.main()
