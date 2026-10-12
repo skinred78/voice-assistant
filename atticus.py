@@ -17,22 +17,16 @@ tasks on the Mac. Output lines for the overlay: "· note", "▸ step", "✓ answ
   atticus.py --pick "<question>" <option>...   the user picks one in the box (files get a preview) -> prints it
   atticus.py --set "<setting name>" on|off   flip one of Atticus's own switches (not safe mode or pause), no clicks
   atticus.py --unwatch                    stop every watch  |  --budget   is real use still under the cost and speed budget?
-Completed requests go to ~/.config/atticus/log.jsonl with their cost (live actions are marked).
+Completed requests go to ~/.config/voice-assistant/log.jsonl with their cost (live actions are marked).
 """
 import atexit, base64, html, json, shutil, threading, os, re, signal, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 
 HOME = os.path.expanduser('~')
-DIR = os.environ.get('ATTICUS_DIR') or os.path.join(HOME, '.config/atticus')   # ATTICUS_DIR: tests keep off the user's chat and rules
+DIR = os.environ.get('ATTICUS_DIR') or os.path.join(HOME, '.config/voice-assistant')   # ATTICUS_DIR: tests keep off the user's chat and rules
 ME = os.path.abspath(__file__)   # inside Atticus.app once built, so the AI's helper commands point here
 PLACE, LOOK, SEARCH, READ, SHOW, REMEMBER, FORGET, TYPE, PLAY, ABOUT, SHORTCUT, FRONT, WATCH, PICK, SET = (ME + f' --{c}' for c in ('place', 'look', 'search', 'read', 'show', 'remember', 'forget', 'type', 'play', 'me add', 'shortcut', 'front', 'watch', 'pick', 'set'))
 MEMORY, RECENT = os.path.join(DIR, 'memory.md'), os.path.join(DIR, 'recent.jsonl')
 PREFS = os.path.join(DIR, 'settings.json')   # written by the Settings window
-# $5 once, sold on Gumroad. shortcut: the source is public, so a coder can delete this check; fine for a $5 app.
-GUMROAD_PRODUCT = ''   # Gumroad product ID; empty = free
-BUY = 'https://3370759087892.gumroad.com/l/atticus'
-KEY_FILE = os.path.join(DIR, 'license')
-# Daily-user count: once a day, a random ID (no name, no asks) goes to PostHog. Off in Settings → Safety. Empty key = off.
-POSTHOG_KEY = os.environ.get('ATTICUS_POSTHOG_KEY', '')   # optional; no embedded API keys
 
 
 # About the user: name, one line they wrote, up to 8 short facts Atticus picked up. Capped at 300 characters
@@ -72,7 +66,7 @@ def pref(key, default):
         return default   # recent: Atticus.app deletes it on ✕
 SHOT = '/tmp/atticus-screen'   # + -<n>.jpg, one per display
 os.environ['PATH'] = f"/opt/homebrew/bin:/usr/local/bin:{HOME}/.local/bin:{HOME}/.claude/local:/usr/bin:/bin:/usr/sbin:" + os.environ.get('PATH', '')
-APP = os.environ.get('ATTICUS_APP') or os.path.join(HOME, 'Applications/Atticus.app/Contents/MacOS/Atticus')   # set by Atticus.app
+APP = os.environ.get('ATTICUS_APP') or os.path.join(HOME, 'Applications/VoiceAssistant.app/Contents/MacOS/VoiceAssistant')   # set by Atticus.app
 
 SYSTEM = f"""You are Atticus, a Mac helper. The user holds a hotkey, talks, lets go; your reply shows in a small box on the user's screen.
 Requests are questions (find the answer and give it), tasks (do it on the Mac), or both ("find this author's bio on Google and open it" = look at the screen, search, open the best page).
@@ -730,41 +724,6 @@ def watch(what, then, app='', words='', mode='', phrase=''):
     notify('Stopped watching after 3 hours.')
 
 
-def licensed():
-    return not GUMROAD_PRODUCT or os.path.exists(KEY_FILE)
-
-
-def activate(key):
-    req = urllib.request.Request('https://api.gumroad.com/v2/licenses/verify',
-                                 urllib.parse.urlencode({'product_id': GUMROAD_PRODUCT, 'license_key': key}).encode())
-    try:
-        r = json.loads(urllib.request.urlopen(req, timeout=10).read())
-    except urllib.error.HTTPError as e:   # Gumroad answers a bad key with a 404
-        r = json.loads(e.read() or b'{}')
-    except OSError:
-        return 'Could not reach Gumroad. Check the internet and try again.'
-    p = r.get('purchase') or {}
-    if not r.get('success') or p.get('refunded') or p.get('chargebacked'):
-        return 'That key did not work. Copy it from your Gumroad receipt and type: key <your key>'
-    os.makedirs(DIR, exist_ok=True)
-    open(KEY_FILE, 'w').write(key)
-    return 'Thanks for buying Atticus! It is unlocked.'
-
-
-def ping():
-    day, stamp = time.strftime('%Y-%m-%d'), os.path.join(DIR, 'pinged')
-    if not POSTHOG_KEY or not pref('stats', True) or (os.path.exists(stamp) and open(stamp).read() == day):
-        return
-    idf = os.path.join(DIR, 'id')
-    if not os.path.exists(idf):
-        os.makedirs(DIR, exist_ok=True)
-        open(idf, 'w').write(base64.b32encode(os.urandom(10)).decode())
-    open(stamp, 'w').write(day)
-    body = json.dumps({'api_key': POSTHOG_KEY, 'event': 'used', 'distinct_id': open(idf).read(), 'properties': {'$process_person_profile': False}})
-    subprocess.Popen(['curl', '-s', '-m', '10', '-H', 'Content-Type: application/json', '-d', body, 'https://us.i.posthog.com/i/v0/e/'],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # its own process: never slows the answer
-
-
 def say(tag, text):
     print(f'{tag} {" ".join(text.split())}', flush=True)
 
@@ -1097,8 +1056,7 @@ def main():
     if args[:1] == ['--fast']:   # explicit CLI action; exit 1 = not a simple command
         os.makedirs(DIR, exist_ok=True)
         started = time.time()
-        ping()
-        r = licensed() and fast(' '.join(args[1:]))
+        r = fast(' '.join(args[1:]))
         if not r:
             sys.exit(1)
         remember_turn(' '.join(args[1:]), r)
@@ -1153,17 +1111,6 @@ def main():
     task = task if args == ['--wait'] else ' '.join(a for a in args if a != '--plan') or ask()
     if not task:
         return warm and stop_claude(warm)
-    ping()
-    key = re.fullmatch(r'\W*(?:my )?(?:license )?key\W+([\w-]{8,})\W*', task, re.I)
-    if key or not licensed():
-        if not wait_commit():
-            return
-        if warm:
-            stop_claude(warm)
-        if key:
-            return say('✓', activate(key[1]))
-        subprocess.run(['open', BUY])
-        return say('✓', f'Atticus is $5, once. Buy a key on the page that just opened, then type: key <your key>')
     t = time.time()
     commit = os.environ.get('ATTICUS_COMMIT')
     quick = (not commit or os.path.exists(commit)) and pref('instant', True) and fast(task)

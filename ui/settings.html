@@ -160,7 +160,7 @@
   <button data-s="apps"><i class="ni" style="background:#ff453a"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/></svg></i>Apps</button>
   <button data-s="account"><i class="ni" style="background:#0a84ff"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></i>Account &amp; Access</button>
   <button data-s="lab"><i class="ni" style="background:#64d2ff"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3M7.5 15h9"/></svg></i>Experimental</button>
-  <button data-s="about"><i class="ni" style="background:#5e5ce6"><svg viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 19h14"/></svg></i>About &amp; Updates</button>
+  <button data-s="about"><i class="ni" style="background:#5e5ce6"><svg viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 19h14"/></svg></i>About</button>
   <div class="spacer"></div>
   <div class="ver" id="ver"></div>
 </nav>
@@ -286,7 +286,6 @@
     <h3>Safety</h3>
     <div class="group">
       <div class="row"><div class="t"><b>Safe mode</b><span>AI commands use a scratch folder. Deletes, sends, purchases and commands requesting access outside it need your approval.</span></div><label class="sw"><input type="checkbox" data-k="safe"></label></div>
-      <div class="row"><div class="t"><b>Count me as a user</b><span>Once a day, sends a random ID so the maker knows how many people use Atticus. Never your name, your asks or your screen.</span></div><label class="sw"><input type="checkbox" data-k="stats"></label></div>
     </div>
     <h3>Permissions</h3>
     <div class="group" id="perms">
@@ -311,15 +310,11 @@
   </section>
 
   <section id="about">
-    <div class="about"><img id="bigicon" alt=""><h1>Atticus</h1><p id="aboutver"></p></div>
-    <h3>Updates</h3>
+    <div class="about"><img id="bigicon" alt=""><h1>Voice Assistant</h1><p id="aboutver"></p></div>
+    <h3>Voice Assistant</h3>
     <div class="group">
-      <div class="row"><div class="t"><b>Update automatically</b><span>Checks every few hours. New versions install in the background and Atticus restarts when you’re not using it.</span></div><label class="sw"><input type="checkbox" data-k="autoUpdate"></label></div>
-      <div class="row"><div class="t"><b>Check for updates</b><span id="upstatus">Never checked this session.</span></div><button class="btn" data-do="checkUpdate">Check Now</button></div>
-    </div>
-    <h3>Atticus</h3>
-    <div class="group">
-      <div class="row"><div class="t"><b>Source code</b><span>Open source on GitHub.</span></div><button class="btn" data-do="github">Open</button></div>
+      <div class="row"><div class="t"><b>Updates</b><span>Never automatic. Pull the repo and run ./build.sh to update.</span></div></div>
+      <div class="row"><div class="t"><b>Source code</b><span>On GitHub. Based on Atticus by SaarthurR (MIT).</span></div><button class="btn" data-do="github">Open</button></div>
     </div>
   </section>
 </main>
@@ -487,8 +482,7 @@
       P = {talkMode: 'hold', ...d.prefs}; recording = false;
       $('shortcut').classList.remove('rec'); $('change').textContent = 'Change Shortcut';
       if (d.icon) $('icon').src = $('bigicon').src = d.icon;
-      $('ver').textContent = $('aboutver').textContent = d.version ? 'Version ' + d.version : 'Atticus';
-      if (d.update) $('upstatus').textContent = d.update;
+      $('ver').textContent = $('aboutver').textContent = d.version ? 'Version ' + d.version : 'Voice Assistant';
       paint(); if (d.state) state(d.state);
     },
     rec(m) { if (recording) /^Add/.test(m) ? showCaps('', m) : showCaps(m, m ? '' : 'Press your shortcut'); },   // held modifiers, live
