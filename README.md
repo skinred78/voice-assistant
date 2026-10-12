@@ -37,21 +37,21 @@ Remove: `launchctl bootout gui/$(id -u)/com.skinred78.tomo`, then delete `~/Appl
 
 ## Tests
 
-`python3 -m unittest discover -s tests -v` runs the offline regressions (CI runs these too). On macOS, `python3 atticus.py --selftest` checks the brain, and after building, `~/Applications/Tomo.app/Contents/MacOS/Tomo --selftest` checks native transcript matching. For the UI checks, run `python3 -m http.server 8765 --bind 127.0.0.1` and open `http://127.0.0.1:8765/tests/ui.html` or `tests/settings.html`.
+`python3 -m unittest discover -s tests -v` runs the offline regressions (CI runs these too). On macOS, `python3 tomo.py --selftest` checks the brain, and after building, `~/Applications/Tomo.app/Contents/MacOS/Tomo --selftest` checks native transcript matching. For the UI checks, run `python3 -m http.server 8765 --bind 127.0.0.1` and open `http://127.0.0.1:8765/tests/ui.html` or `tests/settings.html`.
 
 ## Budget
 
-Inherited from Atticus and still enforced: instant commands use no AI; AI asks should stay under a median of $0.002 and 6 s (`python3 atticus.py --budget`); the system prompt stays under 10,000 characters (a test checks it).
+Inherited from Atticus and still enforced: instant commands use no AI; AI asks should stay under a median of $0.002 and 6 s (`python3 tomo.py --budget`); the system prompt stays under 10,000 characters (a test checks it).
 
 ## Files
 
-- `Atticus.swift`: the app (hotkey, speech, overlay, setup and Settings windows)
-- `atticus.py`: the brain (instant commands, system prompt, helpers for windows, web and screen)
+- `Tomo.swift`: the app (hotkey, speech, overlay, setup and Settings windows)
+- `tomo.py`: the brain (instant commands, system prompt, helpers for windows, web and screen)
 - `ui/ui.html`, `ui/onboarding.html`, `ui/settings.html`: the overlay, the setup flow and Settings
 - `ui/orbs.js`: the [thinking-orbs](https://github.com/Jakubantalik/thinking-orbs) engine (MIT, Jakub Antalik)
 - `vocabulary.txt`: the starting speech vocabulary, copied to `~/.config/tomo/` on the first build
 
-The source files keep their Atticus names for now, so upstream fixes from the MIT version stay easy to compare. `build.sh` compiles with `-module-name Atticus` for the same reason.
+The source files were renamed from Atticus to Tomo on 12 Oct 2026, so app cleaners that remove Atticus leave Tomo alone. Settings still use `ATTICUS_*` environment variables inside the code.
 
 ## Licence and credit
 

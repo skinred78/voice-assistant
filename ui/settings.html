@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
-<!-- Tomo settings. Atticus.swift calls st.load({prefs, state}) and gets {do:'set', k, v} and other actions back. -->
+<!-- Tomo settings. Tomo.swift calls st.load({prefs, state}) and gets {do:'set', k, v} and other actions back. -->
 <style>
   :root {
     --fg: #1d1d1f; --fg2: #6e6e73; --fg3: #8e8e93; --card: rgba(255,255,255,.66); --line: rgba(0,0,0,.08);
@@ -334,7 +334,7 @@
   });
   document.querySelectorAll('[data-do]').forEach(b => b.onclick = () => post({ do: b.dataset.do }));
 
-  // Shortcut: Atticus.swift records the keys; the label is like "⌃⌥Space" (modifier symbols, then the key)
+  // Shortcut: Tomo.swift records the keys; the label is like "⌃⌥Space" (modifier symbols, then the key)
   const capsOf = label => { const m = label.match(/^([⌃⌥⇧⌘]*)(.*)$/); return [...m[1]].concat(m[2] ? [m[2]] : []); };
   const showCaps = (label, hint) => $('caps').innerHTML = capsOf(label).map(c => `<i class="cap${c.length > 2 ? ' wide' : ''}">${c}</i>`).join('')
     + (hint ? `<span class="hint">${hint}</span>` : '');
@@ -419,7 +419,7 @@
   saveMe('myname', 'name'); saveMe('myabout', 'about');
   $('myabout').oninput = () => $('abcount').textContent = $('myabout').value.length + '/200';
 
-  // Apps: every installed app; suggested ones start ticked. Atticus.swift asks macOS about the ticked ones in one go.
+  // Apps: every installed app; suggested ones start ticked. Tomo.swift asks macOS about the ticked ones in one go.
   let APPS = [], pick = null, asking = 0, total = 0, view = 'key';
   const appEsc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function appRow(a) {

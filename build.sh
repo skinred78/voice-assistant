@@ -11,11 +11,11 @@ command -v claude >/dev/null || [ -x ~/.local/bin/claude ] || echo "Note: Claude
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 # A compiler error must leave the installed app and its resources alone.
-# -module-name: the code calls its own globals as Atticus.settings, and swiftc would otherwise name the module after the output (Tomo).
-swiftc -O -target "$(uname -m)-apple-macos26.0" -module-name Atticus Atticus.swift -o "$STAGE/$NAME"
+# -module-name: the code calls its own globals as Tomo.settings.
+swiftc -O -target "$(uname -m)-apple-macos26.0" -module-name Tomo Tomo.swift -o "$STAGE/$NAME"
 APP=~/Applications/$NAME.app   # in Applications so System Settings can list it for permissions
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/ui"
-cp atticus.py "$APP/Contents/Resources/"
+cp tomo.py "$APP/Contents/Resources/"
 cp ui/*.html ui/*.js "$APP/Contents/Resources/ui/"
 cp ui/AppIcon.icns "$APP/Contents/Resources/"
 COMMIT=$(git log -1 --format='%h · %cd' --date=format:'%b %-d, %Y' 2>/dev/null || true)
@@ -48,7 +48,7 @@ codesign -s "${ID:--}" --force "$APP"
 AGENT=~/Library/LaunchAgents/$BUNDLE_ID.plist   # starts at login, restarts if it crashes (Quit stays quit)
 mkdir -p ~/Library/LaunchAgents "$CONFIG"
 [ -f "$CONFIG/vocabulary.txt" ] || cp vocabulary.txt "$CONFIG/"   # speech hints; never overwrites your edits
-python3 "$APP/Contents/Resources/atticus.py" --import-atticus || true   # your Atticus rules and shortcuts, copied once; Atticus is not touched
+python3 "$APP/Contents/Resources/tomo.py" --import-atticus || true   # your Atticus rules and shortcuts, copied once; Atticus is not touched
 cat > "$AGENT" <<P
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import atticus
+import tomo as atticus
 
 
 class BrainTests(unittest.TestCase):
@@ -111,7 +111,7 @@ class BrainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root, patch.object(atticus, 'DIR', root), \
              patch.multiple(atticus, fast=lambda _: 'Opened Spotify.', remember_turn=lambda *_: None), \
              patch.object(atticus.os, 'setpgrp'), patch.object(atticus.signal, 'signal'), \
-             patch('sys.argv', ['atticus.py', '--fast', 'open Spotify']), \
+             patch('sys.argv', ['tomo.py', '--fast', 'open Spotify']), \
              patch('sys.stdout', io.StringIO()), patch.dict(os.environ, {'ATTICUS_LIVE': '1'}):
             atticus.main()
             rows = atticus.read_rows(str(Path(root) / 'log.jsonl'))
@@ -123,7 +123,7 @@ class BrainTests(unittest.TestCase):
         with patch.multiple(atticus, **{name: unittest.mock.DEFAULT for name in
                             ['start_claude', 'fast', 'remember_turn', 'say', 'front', 'stop_claude']}) as mocks, \
              patch.object(atticus.threading, 'Thread'), patch.object(atticus.os, 'setpgrp'), \
-             patch.object(atticus.signal, 'signal'), patch('sys.argv', ['atticus.py', '--wait']), \
+             patch.object(atticus.signal, 'signal'), patch('sys.argv', ['tomo.py', '--wait']), \
              patch('sys.stdin', io.StringIO('Notes\topen Notes\n')), patch.dict(os.environ, {'ATTICUS_COMMIT': ''}):
             # Even without a CLI, --wait must read the request instead of treating its flag as a question.
             mocks['start_claude'].return_value = None
@@ -200,12 +200,12 @@ class BrainTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             marker, ready = Path(root) / 'action', Path(root) / 'ready'
             action = f'import time; from pathlib import Path; Path({str(ready)!r}).touch(); time.sleep(.5); Path({str(marker)!r}).touch()'
-            script = f'''import atticus, subprocess, sys, time
+            script = f'''import tomo as atticus, subprocess, sys, time
 def fast(_):
     subprocess.Popen([sys.executable, '-c', {action!r}])
     time.sleep(30)
 atticus.fast = fast
-sys.argv = ['atticus.py', '--fast', 'test']
+sys.argv = ['tomo.py', '--fast', 'test']
 atticus.main()
 '''
             p = subprocess.Popen([sys.executable, '-c', script], env={**os.environ, 'ATTICUS_DIR': root})
@@ -308,11 +308,11 @@ class WatchAndBudgetTests(unittest.TestCase):
         self.assertEqual(atticus.label('Bash', {'command': 'cat > /private/var/folders/x/prompt.txt <<EOF'}), 'Working on it')
 
     def test_prompt_stays_under_budget(self):
-        # Every ask pays for this prompt. Raising the cap is a decision: check `atticus.py --budget` first.
-        # The helper's full path appears in the prompt many times, so measure it as a plain "atticus.py": the cap
+        # Every ask pays for this prompt. Raising the cap is a decision: check `tomo.py --budget` first.
+        # The helper's full path appears in the prompt many times, so measure it as a plain "tomo.py": the cap
         # tracks the prompt's own text, not where the repo happens to be checked out (CI, a clone, the installed app).
         full = atticus.SYSTEM + atticus.ASK_ME + atticus.POINTER + atticus.LEARN_ME + atticus.TEACH + atticus.ASK_FIRST
-        self.assertLessEqual(len(full.replace(atticus.ME, 'atticus.py')), 10000)
+        self.assertLessEqual(len(full.replace(atticus.ME, 'tomo.py')), 10000)
 
 
 class CaptureTests(unittest.TestCase):

@@ -10,14 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def harness(root):
-    source = (ROOT / 'Atticus.swift').read_text()
+    source = (ROOT / 'Tomo.swift').read_text()
     methods = source[source.index('    func cancelFast()'):source.index('    func stop()')]
-    key = source[source.index('func transcriptKey('):source.index('// atticus.py with')]
+    key = source[source.index('func transcriptKey('):source.index('// tomo.py with')]
     worker = root / 'worker.py'
     worker.write_text('''import os, sys, time
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-import atticus
+import tomo as atticus
 if os.environ.get('BENCH') == '1':
     atticus.start_claude = lambda: None
     atticus.look = lambda: []
@@ -26,7 +26,7 @@ if os.environ.get('BENCH') == '1':
         Path(os.environ['MARKER']).write_text(str(time.time()))
         return type('Result', (), {'returncode': 0})()
     atticus.subprocess.run = action
-    sys.argv = ['atticus.py'] + sys.argv[2:]
+    sys.argv = ['tomo.py'] + sys.argv[2:]
     atticus.main()
 else:
     time.sleep(float(os.environ.get('DELAY', '.1')))
@@ -121,7 +121,7 @@ if CommandLine.arguments.contains("--benchmark") {
 @unittest.skipUnless(sys.platform == 'darwin', 'macOS Swift worker regression')
 class NativeTests(unittest.TestCase):
     def test_shortcut_states_and_recording_limit(self):
-        source = (ROOT / 'Atticus.swift').read_text()
+        source = (ROOT / 'Tomo.swift').read_text()
         methods = source[source.index('    func shortcut('):source.index('    func review(')]
         methods += source[source.index('    func recordingLimit('):source.index('    func start()')]
         methods += source[source.index('    func escape()'):source.index('    func hush()')]

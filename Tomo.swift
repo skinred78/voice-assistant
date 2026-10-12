@@ -1,6 +1,6 @@
 // Tomo overlay: hold to talk and release to send, or press to start and press again to send.
 // A box in the top left (ui/ui.html, with the thinking-orbs orb) shows your words live (Apple on-device speech),
-// then Tomo's notes and steps while `atticus.py` works, then the answer. It never takes focus.
+// then Tomo's notes and steps while `tomo.py` works, then the answer. It never takes focus.
 // Build: ./build.sh. Kept running by ~/Library/LaunchAgents/com.skinred78.tomo.plist
 import Cocoa
 import Carbon
@@ -10,9 +10,9 @@ import WebKit
 import ScreenCaptureKit
 import Vision
 
-let dir = Bundle.main.resourcePath!   // build.sh copies atticus.py and ui/ in here
+let dir = Bundle.main.resourcePath!   // build.sh copies tomo.py and ui/ in here
 
-// Settings, shared with atticus.py (model, screen, openOn, instant): ~/.config/tomo/settings.json
+// Settings, shared with tomo.py (model, screen, openOn, instant): ~/.config/tomo/settings.json
 enum Prefs {
     static let path = NSString(string: "~/.config/tomo/settings.json").expandingTildeInPath
     static let defaults: [String: Any] = ["hotkeyCode": 49, "hotkeyMods": controlKey | optionKey, "hotkeyLabel": "⌃⌥Space", "login": true, "paused": false, "corner": "top-left", "linger": "normal",
@@ -45,7 +45,7 @@ func siriVoice() {
         if (old as? [Any])?.contains(where: { (($0 as? [String: Any])?["voiceId"] as? String)?.hasPrefix("com.apple.siri.") == true }) == true { return }
         let siri: [Any] = ["en", ["_type": "Speech.VoiceSelection", "_version": 0, "boundLanguage": "en", "voiceId": "com.apple.siri.natural.en-US-F"]]
         CFPreferencesSetAppValue(key, siri as CFArray, dom); CFPreferencesAppSynchronize(dom)
-        let out = NSTemporaryDirectory() + "atticus-voice.aiff", p = Process()
+        let out = NSTemporaryDirectory() + "tomo-voice.aiff", p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/say"); p.arguments = ["-o", out, "hi"]
         try? p.run(); p.waitUntilExit()
         let size = (try? FileManager.default.attributesOfItem(atPath: out)[.size] as? Int) ?? 0
@@ -68,11 +68,11 @@ func transcriptKey(_ s: String) -> String {
     s.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").trimmingCharacters(in: CharacterSet(charactersIn: " .,!?:;"))
 }
 
-// atticus.py with whatever python3 this Mac has (Homebrew's first, else Apple's).
+// tomo.py with whatever python3 this Mac has (Homebrew's first, else Apple's).
 func py(_ args: [String], _ extra: [String: String] = [:]) -> Process {
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    p.arguments = ["python3", dir + "/atticus.py"] + args
+    p.arguments = ["python3", dir + "/tomo.py"] + args
     var env = ProcessInfo.processInfo.environment
     env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
     env["ATTICUS_APP"] = Bundle.main.executablePath
@@ -119,7 +119,7 @@ final class App: NSObject, WKScriptMessageHandler {
     var fresh = false   // an untouched input session
     var composing = false, compH: CGFloat = 0, clickTalk = false, quiet: DispatchWorkItem?   // typing box focused / its height from the bottom; mic button = talk without keys
     var toggleTalk = false, shortcutDown = false
-    var askFile = ""   // safe mode: where the Allow / Don't Allow answer goes (atticus.py's gate waits on it)
+    var askFile = ""   // safe mode: where the Allow / Don't Allow answer goes (tomo.py's gate waits on it)
     var hovering = false, xHot = false, pinned = false, stuck = false, lastDone = Date.distantPast   // pinned: the user clicked the box, so only Esc / click-out / ✕ close it; stuck: the user dragged it, so only ✕
     var mine = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""   // the app the user's in, never Tomo itself
     let recent = NSString(string: "~/.config/tomo/recent.jsonl").expandingTildeInPath
@@ -300,7 +300,7 @@ final class App: NSObject, WKScriptMessageHandler {
             if b["mic"] != nil { fresh = false }
             if b["mic"] != nil && !busy && !engine.isRunning { clickTalk = true; start(); if !engine.isRunning { clickTalk = false } }
             if b["ready"] != nil { js("size", Prefs.num("boxH")) }
-            if b["safe"] != nil { Prefs.set("safe", true); js("mode", true); Atticus.settings.push() }
+            if b["safe"] != nil { Prefs.set("safe", true); js("mode", true); Tomo.settings.push() }
             if let i = b["pick"] as? String, !askFile.isEmpty { try? i.write(toFile: askFile, atomically: true, encoding: .utf8); askFile = "" }   // an index, or "" = none
             if let ok = b["allow"] as? Bool, !askFile.isEmpty { try? (ok ? "y" : "n").write(toFile: askFile, atomically: true, encoding: .utf8); askFile = "" }
             return
@@ -543,7 +543,7 @@ final class App: NSObject, WKScriptMessageHandler {
         warm = spawn()   // ready again in case the user keeps talking
     }
 
-    // Runs `atticus.py --fast` on the words not yet used; exit 0 means it was a simple command and it is done.
+    // Runs `tomo.py --fast` on the words not yet used; exit 0 means it was a simple command and it is done.
     func cancelFast() { fastProc?.terminate(); fastProc = nil; fastBusy = false }
 
     func tryFast() {
@@ -641,9 +641,9 @@ final class App: NSObject, WKScriptMessageHandler {
         js("line", answer); lastDone = Date(); cue("soundDone"); hide(after: linger(5))
     }
 
-    // atticus.py --wait, started at key-down so Claude is up by the time the user lets go; run() hands it the words.
+    // tomo.py --wait, started at key-down so Claude is up by the time the user lets go; run() hands it the words.
     func spawn() -> (p: Process, input: FileHandle, commit: String)? {
-        let commit = NSTemporaryDirectory() + "atticus-commit-" + UUID().uuidString
+        let commit = NSTemporaryDirectory() + "tomo-commit-" + UUID().uuidString
         let p = py(["--wait"], ["ATTICUS_UI": "1", "ATTICUS_FRONT": mine, "ATTICUS_COMMIT": commit])
         let pipe = Pipe(), inp = Pipe(); p.standardOutput = pipe; p.standardInput = inp
         var buffer = Data()
@@ -662,7 +662,7 @@ final class App: NSObject, WKScriptMessageHandler {
                     }
                     if line.hasPrefix("⚙ ") {   // "⚙ <key> <true|false>": the AI flips one of Tomo's switches; never safe mode or pause
                         let p = line.split(separator: " ").map(String.init)
-                        if p.count == 3, Prefs.defaults[p[1]] is Bool, !["safe", "paused"].contains(p[1]) { Atticus.settings.apply(p[1], p[2] == "true"); Atticus.settings.push() }
+                        if p.count == 3, Prefs.defaults[p[1]] is Bool, !["safe", "paused"].contains(p[1]) { Tomo.settings.apply(p[1], p[2] == "true"); Tomo.settings.push() }
                         continue
                     }
                     if line.hasPrefix("◇ "), let j = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(2).utf8)) as? [String: Any] {   // "which one?": the choices card
@@ -698,7 +698,7 @@ final class App: NSObject, WKScriptMessageHandler {
         busy = true; answer = ""
         if !speculative { js("think") }
         if let w = warm, !w.p.isRunning { try? w.input.close(); warm = nil }
-        guard let w = warm ?? spawn() else { busy = false; js("msg", "Could not start atticus.py"); return hide(after: 3) }
+        guard let w = warm ?? spawn() else { busy = false; js("msg", "Could not start tomo.py"); return hide(after: 3) }
         warm = nil; proc = w.p; commit = w.commit
         if !speculative {
             do { try "go".write(toFile: commit, atomically: true, encoding: .utf8) }
@@ -762,7 +762,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
          "ax": AXIsProcessTrusted(), "screen": CGPreflightScreenCaptureAccess(), "auto": Apps.check("com.apple.systemevents", ask: false) == noErr]
     }
 
-    // Claude Code installed, signed in, on a paid plan? (atticus.py --check)
+    // Claude Code installed, signed in, on a paid plan? (tomo.py --check)
     static func plan(_ done: @escaping ([String: Any]) -> Void) {
         DispatchQueue.global().async {
             let p = py(["--check"]), out = Pipe(); p.standardOutput = out
@@ -785,7 +785,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
             let need = c["need"] as? String ?? ""
             if need == "upgrade" { NSWorkspace.shared.open(URL(string: "https://claude.ai/upgrade")!); return }
             let cmd = need == "install" ? "curl -fsSL https://claude.ai/install.sh | bash && ~/.local/bin/claude auth login" : "claude auth login"
-            let f = NSTemporaryDirectory() + "atticus-claude.command"
+            let f = NSTemporaryDirectory() + "tomo-claude.command"
             try? "#!/bin/zsh\nexport PATH=\"$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\"\necho 'Tomo: setting up Claude Code'\n\(cmd)\necho; echo 'Done. You can close this window.'\n".write(toFile: f, atomically: true, encoding: .utf8)
             chmod(f, 0o755)
             NSWorkspace.shared.open(URL(fileURLWithPath: f))
@@ -824,7 +824,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
             if UserDefaults.standard.bool(forKey: "askedScreen") { if !CGPreflightScreenCaptureAccess() { settings("ScreenCapture") } }
             else { UserDefaults.standard.set(true, forKey: "askedScreen"); _ = CGRequestScreenCaptureAccess() }
         case "auto":
-            Atticus.settings.open(tab: "apps")
+            Tomo.settings.open(tab: "apps")
         default: break
         }
     }
@@ -844,7 +844,7 @@ final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
     }
 }
 
-// `Tomo --look <screen #> <out.jpg>` (atticus.py --look): the screen without Tomo's own box on it, 1280 px wide.
+// `Tomo --look <screen #> <out.jpg>` (tomo.py --look): the screen without Tomo's own box on it, 1280 px wide.
 if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--look" {
     let a = CommandLine.arguments, done = DispatchSemaphore(value: 0)
     let scr = NSScreen.screens[max(0, min((Int(a[2]) ?? 1) - 1, NSScreen.screens.count - 1))]
@@ -864,7 +864,7 @@ if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--look" {
     exit(FileManager.default.fileExists(atPath: a[3]) ? 0 : 1)
 }
 
-// `Tomo --text <app> [title words]` (atticus.py --watch): the text in that app's window, read on this Mac, even when covered.
+// `Tomo --text <app> [title words]` (tomo.py --watch): the text in that app's window, read on this Mac, even when covered.
 if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--text" {
     let a = CommandLine.arguments, words = a.count > 3 ? a[3].lowercased() : "", done = DispatchSemaphore(value: 0)
     var found = false
@@ -983,7 +983,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     @objc func quit() { NSApp.terminate(nil) }
 }
 
-// Settings window (ui/settings.html): every setting lives in Prefs; atticus.py reads the same file.
+// Settings window (ui/settings.html): every setting lives in Prefs; tomo.py reads the same file.
 // Apps Tomo may control. macOS asks once per app, only while that app runs, and has no "allow all". So Settings > Apps
 // lists every installed app and asks for all the ticked ones in one go: start each hidden, ask, quit it again.
 // macOS only answers "allowed?" for running apps, so what it said is kept in UserDefaults ("allowedApps").
@@ -1126,7 +1126,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         web?.evaluateJavaScript("st.load(\(s))")
     }
 
-    func refresh() {   // usage, saved rules, Claude plan: atticus.py --state (it runs Claude Code, so off the main thread)
+    func refresh() {   // usage, saved rules, Claude plan: tomo.py --state (it runs Claude Code, so off the main thread)
         DispatchQueue.global().async { [weak self] in
             let p = py(["--state"]), out = Pipe(); p.standardOutput = out
             try? p.run(); p.waitUntilExit()
@@ -1176,7 +1176,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
 
     func helper(_ args: [String]) { let p = py(args); try? p.run(); p.waitUntilExit() }
 
-    func apply(_ k: String, _ v: Any) {   // one setting changed, from this window or by voice (atticus.py --set)
+    func apply(_ k: String, _ v: Any) {   // one setting changed, from this window or by voice (tomo.py --set)
         Prefs.set(k, v)
         if k == "speak" { if v as? Bool == true { siriVoice() } else { app.shush() } }
         if k == "hideWhenSharing" { app.panel.sharingType = v as? Bool == true ? .none : .readOnly }

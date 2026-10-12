@@ -4,20 +4,20 @@ Based on Atticus by SaarthurR (MIT), whose idea came from Caleb Writes Code's "A
 
 Hold Control+Option+Space (Tomo.app) -> talk -> let go. It answers questions (web, files, screen) and does
 tasks on the Mac. Output lines for the overlay: "· note", "▸ step", "✓ answer".
-  atticus.py "what's on my screen?"      run one request (no args = a typed pop-up, used by the SwiftBar menu)
-  atticus.py --place <proc> <left|right|full|center> <laptop|monitor|current> [title]
-  atticus.py --look                       screenshot of the screen the user is using -> prints the image path
-  atticus.py --front <app> [tab words]   bring that app (and that browser tab) forward, then --look
-  atticus.py --show <url|path|app>       open it on the user's other screen and give focus back to what the user was using
-  atticus.py --remember "<line>"  |  --forget "<words>"   the user's saved rules, one line each, sent with every request
-  atticus.py --shortcut "<words>" "<shell command>"  the user's own command: those words then run it instantly, no AI
-  atticus.py --fast "<words>"            run it instantly with no AI if it is a simple command (exit 1 if not)
-  atticus.py --play "<playlist name>"     play one of the user's Spotify playlists, no clicks, focus stays put
-  atticus.py --search <query>  |  --read <url>   free web search (DuckDuckGo) / one page as plain text
-  atticus.py --watch <app> "<title words>" <gone|shows> "<phrase>" ["<request>"]   watch a window in the background, no AI, then notify (and run the request)
-  atticus.py --pick "<question>" <option>...   the user picks one in the box (files get a preview) -> prints it
-  atticus.py --set "<setting name>" on|off   flip one of Tomo's own switches (not safe mode or pause), no clicks
-  atticus.py --unwatch                    stop every watch  |  --budget   is real use still under the cost and speed budget?
+  tomo.py "what's on my screen?"      run one request (no args = a typed pop-up, used by the SwiftBar menu)
+  tomo.py --place <proc> <left|right|full|center> <laptop|monitor|current> [title]
+  tomo.py --look                       screenshot of the screen the user is using -> prints the image path
+  tomo.py --front <app> [tab words]   bring that app (and that browser tab) forward, then --look
+  tomo.py --show <url|path|app>       open it on the user's other screen and give focus back to what the user was using
+  tomo.py --remember "<line>"  |  --forget "<words>"   the user's saved rules, one line each, sent with every request
+  tomo.py --shortcut "<words>" "<shell command>"  the user's own command: those words then run it instantly, no AI
+  tomo.py --fast "<words>"            run it instantly with no AI if it is a simple command (exit 1 if not)
+  tomo.py --play "<playlist name>"     play one of the user's Spotify playlists, no clicks, focus stays put
+  tomo.py --search <query>  |  --read <url>   free web search (DuckDuckGo) / one page as plain text
+  tomo.py --watch <app> "<title words>" <gone|shows> "<phrase>" ["<request>"]   watch a window in the background, no AI, then notify (and run the request)
+  tomo.py --pick "<question>" <option>...   the user picks one in the box (files get a preview) -> prints it
+  tomo.py --set "<setting name>" on|off   flip one of Tomo's own switches (not safe mode or pause), no clicks
+  tomo.py --unwatch                    stop every watch  |  --budget   is real use still under the cost and speed budget?
 Completed requests go to ~/.config/tomo/log.jsonl with their cost (live actions are marked).
 """
 import atexit, base64, calendar, html, json, shutil, threading, os, re, signal, subprocess, sys, tempfile, time, urllib.parse, urllib.request
@@ -65,7 +65,7 @@ def pref(key, default):
         return json.load(open(PREFS)).get(key, default)
     except (OSError, ValueError):
         return default   # recent: Tomo.app deletes it on ✕
-SHOT = '/tmp/atticus-screen'   # + -<n>.jpg, one per display
+SHOT = '/tmp/tomo-screen'   # + -<n>.jpg, one per display
 os.environ['PATH'] = f"/opt/homebrew/bin:/usr/local/bin:{HOME}/.local/bin:{HOME}/.claude/local:/usr/bin:/bin:/usr/sbin:" + os.environ.get('PATH', '')
 APP = os.environ.get('ATTICUS_APP') or os.path.join(HOME, 'Applications/Tomo.app/Contents/MacOS/Tomo')   # set by Tomo.app
 
@@ -610,7 +610,7 @@ def choose(question, paths):
         r = osa('on run argv\nset r to choose from list (rest of argv) with prompt (item 1 of argv)\nif r is false then return ""\nreturn item 1 of r\nend run',
                 question, *[p.replace(HOME, '~', 1) for p in paths])
         return next((i for i, p in enumerate(paths) if p.replace(HOME, '~', 1) == r), None)
-    d = tempfile.mkdtemp(prefix='atticus-pick-')
+    d = tempfile.mkdtemp(prefix='tomo-pick-')
     a, parent = os.path.join(d, 'a'), os.getppid()
     try:
         print('◇ ' + json.dumps({'q': question, 'options': choices(paths), 'a': a}), flush=True)
@@ -826,7 +826,7 @@ def look():
     """Every display, at once, 1280 px wide (≈1.5K tokens each) -> [(path, label)]. "My monitor" needs the right one."""
     scr = screens()
     def one(i):
-        fd, path = tempfile.mkstemp(prefix=f'atticus-screen-{i}-', suffix='.jpg')
+        fd, path = tempfile.mkstemp(prefix=f'tomo-screen-{i}-', suffix='.jpg')
         os.close(fd)
         os.remove(path)
         atexit.register(lambda: os.path.exists(path) and os.remove(path))
@@ -1032,7 +1032,7 @@ def start_claude():
         return None
     system = SYSTEM.replace('NEVER_RISKY', ASK_FIRST if pref('safe', True) else NEVER) + (ASK_ME if pref('askMe', True) else '') + (POINTER if pref('pointer', False) else '') + (LEARN_ME if pref('learnMe', True) else '') + (TEACH if pref('tips', True) else '')
     settings = {}
-    ask = tempfile.mkdtemp(prefix='atticus-ask-')   # the Allow card (safe mode) and the choices card talk through it
+    ask = tempfile.mkdtemp(prefix='tomo-ask-')   # the Allow card (safe mode) and the choices card talk through it
     atexit.register(shutil.rmtree, ask, True)   # however this run ends
     if pref('safe', True):
         settings['sandbox'] = {'enabled': True, 'autoAllowBashIfSandboxed': True, 'allowUnsandboxedCommands': True, 'excludedCommands': SAFE_OUT}
