@@ -476,5 +476,21 @@ class GateTests(unittest.TestCase):
         self.assertIsNone(decision)
 
 
+class ImportTests(unittest.TestCase):
+    def test_copies_once_and_points_shortcuts_here(self):
+        with tempfile.TemporaryDirectory() as root:
+            src, dst = Path(root) / 'atticus', Path(root) / 'tomo'
+            src.mkdir()
+            (src / 'memory.md').write_text('- open means front\n')
+            (src / 'skills.json').write_text(json.dumps({'study mode': {'cmds': ['/Users/sam/Applications/Atticus.app/Contents/Resources/atticus.py --show "Notes"; open -a Atticus'], 'reply': 'Done'}}))
+            with patch.object(atticus, 'DIR', str(dst)):
+                self.assertEqual(atticus.import_atticus(str(src)), ['memory.md', 'skills.json'])
+                self.assertEqual(json.loads((dst / 'skills.json').read_text())['study mode']['cmds'], [f'{atticus.ME} --show "Notes"; open -a Tomo'])
+                (dst / 'memory.md').write_text('- mine\n')
+                self.assertEqual(atticus.import_atticus(str(src)), [])
+                self.assertEqual((dst / 'memory.md').read_text(), '- mine\n')
+            self.assertEqual((src / 'memory.md').read_text(), '- open means front\n')
+
+
 if __name__ == '__main__':
     unittest.main()

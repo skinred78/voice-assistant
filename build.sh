@@ -48,6 +48,7 @@ codesign -s "${ID:--}" --force "$APP"
 AGENT=~/Library/LaunchAgents/$BUNDLE_ID.plist   # starts at login, restarts if it crashes (Quit stays quit)
 mkdir -p ~/Library/LaunchAgents "$CONFIG"
 [ -f "$CONFIG/vocabulary.txt" ] || cp vocabulary.txt "$CONFIG/"   # speech hints; never overwrites your edits
+python3 "$APP/Contents/Resources/atticus.py" --import-atticus || true   # your Atticus rules and shortcuts, copied once; Atticus is not touched
 cat > "$AGENT" <<P
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

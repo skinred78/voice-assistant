@@ -726,6 +726,28 @@ def add_under_capture(path, line):
     os.replace(tmp, path)   # whole or not at all: Obsidian never sees half a note
 
 
+def import_atticus(src=os.path.join(HOME, '.config/atticus')):
+    """One time, at build: Sam's Atticus rules, facts and learned shortcuts, copied (never moved) into Tomo's folder.
+    A file Tomo already has is left alone. Shortcuts that call Atticus's helper are pointed at this one."""
+    done = []
+    os.makedirs(DIR, exist_ok=True)
+    for name in ('memory.md', 'me.json', 'skills.json'):
+        a, b = os.path.join(src, name), os.path.join(DIR, name)
+        if not os.path.isfile(a) or os.path.exists(b):
+            continue
+        text = open(a, encoding='utf-8').read()
+        if name == 'skills.json':
+            text = re.sub(r'(?:/[^\s"\'/]+)*/Atticus\.app/Contents/Resources/atticus\.py', ME.replace('\\', '\\\\'), text)
+            text = text.replace('open -a Atticus', 'open -a Tomo')
+            try:
+                json.loads(text)
+            except ValueError:
+                continue   # never write a broken file
+        open(b, 'w', encoding='utf-8').write(text)
+        done.append(name)
+    return done
+
+
 def fast(text):
     """Simple commands with no AI: learned shortcuts, open <app/site>, snap/move <it/app> left/right/full/center, to laptop/monitor.
     Returns a reply, or None to hand the request to Haiku."""
@@ -1300,6 +1322,9 @@ def main():
         os.makedirs(DIR, exist_ok=True)
         json.dump(sk, open(SKILLS, 'w'), indent=1)
         return print(f'saved: "{plain(args[1])}" runs it')
+    if args == ['--import-atticus']:   # build.sh, from the installed copy so shortcuts point at it
+        done = import_atticus()
+        return print('Imported from Atticus: ' + ', '.join(done) if done else 'Nothing new to import from Atticus.')
     if args[:1] == ['--unlearn']:
         return unlearn(' '.join(args[1:]))
     if args == ['--check']:   # the setup window asks this
