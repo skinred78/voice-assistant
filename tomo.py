@@ -25,7 +25,7 @@ import atexit, base64, calendar, html, json, shutil, threading, os, re, signal, 
 HOME = os.path.expanduser('~')
 DIR = os.environ.get('ATTICUS_DIR') or os.path.join(HOME, '.config/tomo')   # ATTICUS_DIR: tests keep off the user's chat and rules
 ME = os.path.abspath(__file__)   # inside Tomo.app once built, so the AI's helper commands point here
-PLACE, LOOK, SEARCH, READ, SHOW, REMEMBER, FORGET, TYPE, PLAY, ABOUT, SHORTCUT, FRONT, WATCH, PICK, SET = (ME + f' --{c}' for c in ('place', 'look', 'search', 'read', 'show', 'remember', 'forget', 'type', 'play', 'me add', 'shortcut', 'front', 'watch', 'pick', 'set'))
+PLACE, LOOK, SEARCH, READ, SHOW, REMEMBER, FORGET, TYPE, PLAY, ABOUT, SHORTCUT, FRONT, WATCH, PICK, SET, NOTE = (ME + f' --{c}' for c in ('place', 'look', 'search', 'read', 'show', 'remember', 'forget', 'type', 'play', 'me add', 'shortcut', 'front', 'watch', 'pick', 'set', 'note'))
 MEMORY, RECENT = os.path.join(DIR, 'memory.md'), os.path.join(DIR, 'recent.jsonl')
 PREFS = os.path.join(DIR, 'settings.json')   # written by the Settings window
 
@@ -74,7 +74,7 @@ Requests are questions (find the answer and give it), tasks (do it on the Mac), 
 Speed matters; every extra round costs the user a second. Answer stable facts without a tool. For current facts (news, prices, schedules, weather), search once and prefer a dated primary source. Never invent details missing from the screen or search results. Do the whole task in ONE Bash call when you can (chain with ;). Need several things? Ask for them all in the same turn, not one after another.
 Before EACH tool call write a 3-8 word note of what you are doing; it shows live. Plain words only, never tool or command names (no peekaboo, screenshot, osascript): "Looking at your screen", "Clicking Play".
 Do, don't describe: "make a list / add / remind me / note this" means create it in the app, never only list it back or offer to.
-Final reply: plain text, no markdown, at most 3 short sentences, answer first. For a done task, one sentence saying it's done; no "but I didn't check".
+Final reply: plain text, no markdown, at most 3 short sentences, answer first. For a done task, one sentence saying it's done. Never say done unless a command's output or a fresh look shows it worked; otherwise say what failed.
 Be cheap: fewest tool calls. Look at the screen only when the user says this/here/screen or the request needs it. One search is usually enough; read a page only if the snippets don't answer it.
 Tools:
 - See the user's screen: when the request is about it, a labeled picture of each of the user's screens comes with the request: use the one the user means ("my monitor" = the external one; "my screen" with no hint = the one the user's front window is on), don't take another. Otherwise run {LOOK} (prints an image path), then Read that path.
@@ -91,7 +91,7 @@ Tools:
 - "Tell me when / watch / monitor X" (a reply finishes, a build or download ends, a page shows something): look once, pick a short phrase on screen that shows the state, then ONE call: {WATCH} "<app>" "<window title words or empty>" <gone|shows> "<phrase>" ["<what to do then, as a request>"]. gone = done when the phrase disappears (e.g. "esc to interrupt" while a coding agent works); shows = done when it appears. It reads that window on this Mac every 5 s with no AI (it must stay on this desktop), notifies the user, then runs the request. Without the screen: {WATCH} cmd '<shell test, exit 0 = done>' ["<request>"]; a Codex task is done when: tail -n 2 "$(ls -t ~/.codex/sessions/*/*/*/*.jsonl | head -1)" | grep -q task_complete. Prefer cmd when it fits. Reply that you are watching. "Stop watching": {ME} --unwatch.
 - Last resort, only when nothing above works (it moves the user's real mouse and pulls the app forward) — click or read buttons/menus inside an app: peekaboo see --app "<App>" --json --no-remote | head -c 3000 (always cut it; lists elements with IDs), then peekaboo click --on <ID> --no-remote, peekaboo type "text" --no-remote, peekaboo menu click --app "<App>" --path "File > New" --no-remote. Run peekaboo <cmd> --help if unsure.
 - Spotify: play any song, album, artist or the user's own playlist: {PLAY} "<name, plus artist if known>" (no clicks, the user's focus stays). Music requests mean Spotify unless the user names another app. Pause/skip: osascript -e 'tell application "Spotify" to playpause' (or next track). Never click in Spotify unless those fail.
-- Task list, to-do, "remind me": Reminders, all items in one call: osascript -e 'tell application "Reminders"' -e 'repeat with t in {{"A", "B"}}' -e 'make new reminder with properties {{name:t}}' -e 'end repeat' -e 'end tell' (for a time add due date:(current date) + <seconds>). "Note this": osascript -e 'tell application "Notes" to make new note with properties {{body:"<h1>Title</h1>A<br>B"}}'. "Where is my list/note" = {SHOW} "Reminders" (or "Notes").
+- To-do, "remind me", "note this", anything for Obsidian: {NOTE} "<the item, in the user's words>" (adds it to today's daily note; never type into Obsidian). Reminders only if the user names it or gives a time: osascript -e 'tell application "Reminders" to make new reminder with properties {{name:"A", due date:(current date) + <seconds>}}'.
 - Clipboard: pbpaste. Music: osascript -e 'tell application "Music" to playpause'.
 Earlier: the last few questions from the past 5 minutes, if any; use them for follow-ups ("open the second one", "and tomorrow?").
 Memory: the user's saved rules come under "Memory:" in the request; follow them. When the user says remember / from now on, save ONE short line with {REMEMBER} "<rule>". When the user says forget, run {FORGET} "<words from that line>".
@@ -137,7 +137,7 @@ RISKY = [('Delete something?', r'\b(rm|rmdir|srm|unlink|shred|trash|mv)\s|\bdele
          ('Buy this?', r'\b(buy|purchase|checkout|check out|place (an |the )?order|pay)\b'),
          ('Change a file?', r'(?<![0-9&])>>?\s*(?!/dev/null|&|/tmp/)\S|\btee\s|curl\b.*\s(-o|--output|-O)\b'),
          ('Run a system command?', r'do shell script|\bsudo\b|\bkillall\b|\bdefaults write\b')]
-QUIET = (SEARCH, READ, LOOK, FRONT, SHOW, PLACE, PLAY, TYPE, REMEMBER, FORGET, ABOUT, PICK, SET, 'open ', 'mdfind ', 'pbpaste')   # never delete, send or buy
+QUIET = (SEARCH, READ, LOOK, FRONT, SHOW, PLACE, PLAY, TYPE, REMEMBER, FORGET, ABOUT, PICK, SET, NOTE, 'open ', 'mdfind ', 'pbpaste')   # never delete, send or buy
 
 
 def leaks(url):
@@ -566,7 +566,8 @@ KINDS = {'deck': ('.pptx', '.ppt', '.key', '.pdf'), 'slides': ('.pptx', '.ppt', 
 FILLER = {'my', 'the', 'a', 'an', 'me', 'called', 'named', 'about', 'on', 'for', 'with', 'that', 'which', 'is', 'was', 'i', 'of', 'from', 'some'}
 FILE_ASK = re.compile(r'(?:find|locate|where is|where\'s|wheres|where did i (?:put|save))\s+(?:me\s+)?(.+)'
                       r'|(?:open|pull up|bring up|show me)\s+((?:my|the)\s+.+\s(?:' + '|'.join(KINDS) + r'))')
-VAULT_ASK = re.compile(r'(?:find|search(?: for)?|look for|look up)\s+(.+?)\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:obsidian(?: vault)?|vault)')
+VAULT_ASK = re.compile(r'(?:find|search(?: for)?|look for|look up)\s+(.+?)\s+(?:in|on)\s+(?:my\s+|the\s+)?(?:obsidian(?: vault)?|vault)'
+                       r'|(?:search|look)\s+(?:in\s+|on\s+|through\s+)?(?:my\s+|the\s+)?(?:obsidian(?: vault)?|vault)(?:\s+for)?(?:\s+(.+))?')
 FOUND = 'found.json'   # in DIR: the last files listed, so "open the second one" needs no AI
 ORDINAL = {w: i for i, ws in enumerate((('first', '1st', 'top', 'one'), ('second', '2nd', 'two'), ('third', '3rd', 'three'),
                                         ('fourth', '4th', 'four'), ('fifth', '5th', 'five'))) for w in ws}
@@ -641,7 +642,10 @@ def find_files(t):
     """"find my budget spreadsheet" and the like -> a reply, or None (nothing asked for, or nothing found: the AI tries)."""
     vm, m = VAULT_ASK.fullmatch(t), FILE_ASK.fullmatch(t)
     vault = os.path.expanduser(pref('vault', '~/obsidian-vault')) if vm else ''
-    ask = vm[1] if vm else m and (m[1] or m[2])
+    if vm and not (vm[1] or vm[2]):   # "search in Obsidian" with no words yet: Obsidian's own search box
+        subprocess.run(['open', 'obsidian://search?vault=' + urllib.parse.quote(os.path.basename(vault.rstrip('/')))])
+        return 'Opened search in Obsidian.'
+    ask = (vm[1] or vm[2]) if vm else m and (m[1] or m[2])
     if not ask or (m and m[1] and not vm and not re.search(r'\b(my|called|named)\b|\b(' + '|'.join(KINDS) + r')\b', ask)):
         return None   # "find a good cafe" is not a file search
     if vault and not os.path.isdir(vault):
@@ -680,15 +684,23 @@ def open_nth(t):
 # in today's daily note, the words as spoken. Append only: nothing else in the note changes. No note today: the voice inbox.
 CAPTURE = re.compile(r'^\s*(?:(?:hey|ok|okay)[,\s]+)?(?:tomo[,\s]+)?(?:(?:please|can you|could you)\s+)?'
                      r'(?:(?:note that|note|capture|take a note(?: that)?|jot down)\b[\s,:-]*|(?=remind me to\b))(.*?)\s*$', re.I | re.S)
+TODO = re.compile(r'^\s*(?:(?:hey|ok|okay)[,\s]+)?(?:tomo[,\s]+)?(?:(?:please|can you|could you)\s+)?add\s+(.+?)\s+to\s+(?:my\s+|the\s+)?(?:obsidian\s+)?'
+                  r'(?:to-?\s?do(?:\s+list)?|todo(?:\s+list)?|task\s+list|tasks|obsidian(?:\s+vault)?|vault|daily\s+note|inbox|capture)[\s.!]*$', re.I | re.S)
 INBOX = 'CMO/_capture/voice-inbox.md'
 
 
 def capture(text):
     """-> a reply once saved, or None when it is not a capture (or only "note this": the screen, so the AI)."""
-    m = CAPTURE.match(text)
-    words = ' '.join(m[1].split()) if m else ''
-    if re.fullmatch(r'((this|that|it|these|those)( down| for me)?)?', words.lower().strip(' .,!?')):
+    t = TODO.match(text)
+    m = t or CAPTURE.match(text)
+    words = ('To-do: ' if t else '') + ' '.join(m[1].split()) if m else ''
+    if re.fullmatch(r'((to-do: )?(this|that|it|these|those)( down| for me)?)?', words.lower().strip(' .,!?')):
         return None
+    return save_capture(words)
+
+
+def save_capture(words):
+    """Append the words to today's daily note (or the voice inbox), then read the file back: never "saved" unless it is there."""
     vault = os.path.expanduser(pref('vault', '~/obsidian-vault'))
     day, now = time.strftime('%Y-%m-%d'), time.strftime('%H:%M')
     if not os.path.isdir(vault):   # never lose the words
@@ -698,13 +710,20 @@ def capture(text):
         return f'No Obsidian vault at {vault.replace(HOME, "~", 1)}, so I saved it in {DIR.replace(HOME, "~", 1)}/captures.md.'
     note = os.path.join(vault, pref('dailyNotes', 'Daily Notes'), day + '.md')
     if os.path.isfile(note):
-        add_under_capture(note, f'- {now} {words}')
-        return 'Noted in today\'s daily note.'
-    inbox = os.path.join(vault, INBOX)
-    os.makedirs(os.path.dirname(inbox), exist_ok=True)
-    with open(inbox, 'a', encoding='utf-8') as f:
-        f.write(f'- {day} {now} {words}\n')
-    return f'Today\'s daily note isn\'t there yet, so it went to {INBOX}.'
+        path, line = note, f'- {now} {words}'
+        add_under_capture(path, line)
+        done = 'Noted in today\'s daily note.'
+    else:
+        path, line = os.path.join(vault, INBOX), f'- {day} {now} {words}'
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+        done = f'Today\'s daily note isn\'t there yet, so it went to {INBOX}.'
+    try:
+        saved = line in open(path, encoding='utf-8').read().split('\n')
+    except OSError:
+        saved = False
+    return done if saved else f'Could not save it to {path.replace(HOME, "~", 1)}. Nothing was added.'
 
 
 def add_under_capture(path, line):
@@ -765,7 +784,7 @@ def fast(text):
         if r:
             return r
     m = re.fullmatch(r'(?:search(?: up)?|google|look up)(?: for)? (.+?)(?: (?:on|in) (google|chrome|safari|youtube|spotify|amazon|the web))?', t)
-    if m and not re.search(r'\b(this|that|it|these|my)\b', m[1]):   # "search this" needs the screen: AI
+    if m and not re.search(r'\b(this|that|it|these|my|obsidian|vault)\b', m[1]):   # "search this" needs the screen: AI; the vault is never a web search
         q = urllib.parse.quote(m[1])
         subprocess.run(['open', {'youtube': f'https://www.youtube.com/results?search_query={q}', 'spotify': f'spotify:search:{q}',
                                  'amazon': f'https://www.amazon.com/s?k={q}'}.get(m[2], f'https://www.google.com/search?q={q}')])
@@ -1322,6 +1341,8 @@ def main():
         os.makedirs(DIR, exist_ok=True)
         json.dump(sk, open(SKILLS, 'w'), indent=1)
         return print(f'saved: "{plain(args[1])}" runs it')
+    if args[:1] == ['--note'] and len(args) > 1:   # the AI's way into Obsidian: the same append-and-check as "note that"
+        return print(save_capture(' '.join(' '.join(args[1:]).split())))
     if args == ['--import-atticus']:   # build.sh, from the installed copy so shortcuts point at it
         done = import_atticus()
         return print('Imported from Atticus: ' + ', '.join(done) if done else 'Nothing new to import from Atticus.')

@@ -357,6 +357,25 @@ class CaptureTests(unittest.TestCase):
         for text in ['note this', 'Note that.', 'open Notes', 'notion', 'what are my notes about', 'remind me at 3 to call']:
             self.assertIsNone(atticus.capture(text), text)
 
+    def test_add_to_my_todo_is_written_not_typed(self):
+        self.note.write_text('## Capture\n')
+        for text in ['Add check the new notch app to my Obsidian to-do.', 'add call Kenji to my todo list', 'Tomo, add renew Weave to Obsidian']:
+            self.assertEqual(atticus.capture(text), "Noted in today's daily note.", text)
+        self.assertEqual(self.note.read_text(), '## Capture\n- 09:30 To-do: check the new notch app\n- 09:30 To-do: call Kenji\n- 09:30 To-do: renew Weave\n')
+        self.assertIsNone(atticus.capture('add Spotify to my dock'))
+
+    def test_never_says_saved_unless_the_line_is_in_the_file(self):
+        self.note.write_text('## Capture\n')
+        with patch.object(atticus, 'add_under_capture'):   # the write silently does nothing
+            self.assertIn('Could not save', atticus.capture('note that x'))
+
+    def test_note_helper_for_the_ai(self):
+        self.note.write_text('## Capture\n')
+        with patch('sys.argv', ['tomo.py', '--note', 'To-do:', 'check  the notch app']), patch('sys.stdout', new_callable=io.StringIO) as out:
+            atticus.main()
+        self.assertEqual(out.getvalue().strip(), "Noted in today's daily note.")
+        self.assertIn('- 09:30 To-do: check the notch app', self.note.read_text())
+
     def test_fast_captures_only_confirmed_words(self):
         self.note.write_text('## Capture\n')
         with patch.object(atticus, 'skills', return_value={}):
@@ -416,6 +435,17 @@ class FileSearchTests(unittest.TestCase):
             with patch.object(atticus, 'spotlight', return_value=[a, b]), patch.object(atticus, 'choose', return_value=0):
                 self.assertEqual(atticus.fast('where is my budget'), f'Budget.xlsx is in {self.root}.')
             self.assertEqual(run.call_args.args[0], ['open', '-R', a])
+
+    def test_search_in_obsidian_is_never_a_web_search(self):
+        with patch.object(atticus, 'pref', side_effect=lambda k, d: {'vault': str(self.root)}.get(k, d)), \
+             patch.object(atticus, 'spotlight', return_value=[]) as sp, patch.object(atticus.subprocess, 'run') as run:
+            self.assertEqual(atticus.fast('Search in Obsidian'), 'Opened search in Obsidian.')
+            self.assertEqual(run.call_args.args[0], ['open', 'obsidian://search?vault=' + self.root.name])
+            run.reset_mock()
+            for t in ['search obsidian for pricing', 'search my vault for pricing', 'search in obsidian for pricing']:
+                self.assertIsNone(atticus.fast(t))   # nothing found: the AI, never Google
+            self.assertEqual([c.args[0] for c in sp.call_args_list], [['pricing']] * 3)
+            run.assert_not_called()
 
     def test_live_words_never_search(self):
         with patch.dict(os.environ, {'ATTICUS_LIVE': '1'}), patch.object(atticus, 'spotlight') as sp:
