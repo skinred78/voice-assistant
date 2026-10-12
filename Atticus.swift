@@ -153,11 +153,15 @@ final class App: NSObject, WKScriptMessageHandler {
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && !$0.hasPrefix("#") }
         let shortcuts = (try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: config + "/skills.json")))) as? [String: Any] ?? [:]
         let user = (try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: config + "/me.json")))) as? [String: Any] ?? [:]
+        // Separate typed steps: one long chain is too slow for the Swift type checker.
+        let own: [String] = ["Tomo", "Chrome", "VS Code", "Peekaboo", "split screen", "study mode", user["name"] as? String ?? ""]
+        let folders: [String] = [NSHomeDirectory() + "/Applications", "/Applications", "/System/Applications", "/System/Applications/Utilities"]
+        let apps: [String] = folders.flatMap { (f: String) -> [String] in
+            ((try? FileManager.default.contentsOfDirectory(atPath: f)) ?? []).filter { $0.hasSuffix(".app") }.map { String($0.dropLast(4)) }
+        }
+        let all: [String] = vocab + own + shortcuts.keys.sorted() + apps
         var seen = Set<String>()
-        return Array((vocab + ["Tomo", "Chrome", "VS Code", "Peekaboo", "split screen", "study mode", user["name"] as? String ?? ""] + shortcuts.keys.sorted() +
-        [NSHomeDirectory() + "/Applications", "/Applications", "/System/Applications", "/System/Applications/Utilities"].flatMap {
-            ((try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? []).filter { $0.hasSuffix(".app") }.map { String($0.dropLast(4)) }
-        }).filter { !$0.isEmpty && seen.insert($0).inserted }.prefix(100))
+        return Array(all.filter { !$0.isEmpty && seen.insert($0).inserted }.prefix(100))
     }
     func sound(_ name: String, _ v: Float) { let s = NSSound(named: name); s?.volume = v; s?.play() }
     func cue(_ k: String) { let n = Prefs.str(k); if n != "None" { sound(n, Float(Prefs.num("volume"))) } }   // soundStart / soundDone / soundStop
