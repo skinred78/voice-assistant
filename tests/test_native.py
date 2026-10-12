@@ -19,8 +19,6 @@ from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 import atticus
 if os.environ.get('BENCH') == '1':
-    atticus.licensed = lambda: True
-    atticus.ping = lambda: None
     atticus.start_claude = lambda: None
     atticus.look = lambda: []
     atticus.app_named = lambda _: 'Spotify'

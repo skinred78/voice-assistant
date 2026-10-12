@@ -109,8 +109,7 @@ class BrainTests(unittest.TestCase):
 
     def test_fast_action_is_logged_once_at_zero_cost(self):
         with tempfile.TemporaryDirectory() as root, patch.object(atticus, 'DIR', root), \
-             patch.multiple(atticus, licensed=lambda: True, ping=lambda: None,
-                            fast=lambda _: 'Opened Spotify.', remember_turn=lambda *_: None), \
+             patch.multiple(atticus, fast=lambda _: 'Opened Spotify.', remember_turn=lambda *_: None), \
              patch.object(atticus.os, 'setpgrp'), patch.object(atticus.signal, 'signal'), \
              patch('sys.argv', ['atticus.py', '--fast', 'open Spotify']), \
              patch('sys.stdout', io.StringIO()), patch.dict(os.environ, {'ATTICUS_LIVE': '1'}):
@@ -122,13 +121,12 @@ class BrainTests(unittest.TestCase):
 
     def test_confirmed_instant_command_skips_context_work(self):
         with patch.multiple(atticus, **{name: unittest.mock.DEFAULT for name in
-                            ['start_claude', 'licensed', 'ping', 'fast', 'remember_turn', 'say', 'front', 'stop_claude']}) as mocks, \
+                            ['start_claude', 'fast', 'remember_turn', 'say', 'front', 'stop_claude']}) as mocks, \
              patch.object(atticus.threading, 'Thread'), patch.object(atticus.os, 'setpgrp'), \
              patch.object(atticus.signal, 'signal'), patch('sys.argv', ['atticus.py', '--wait']), \
              patch('sys.stdin', io.StringIO('Notes\topen Notes\n')), patch.dict(os.environ, {'ATTICUS_COMMIT': ''}):
             # Even without a CLI, --wait must read the request instead of treating its flag as a question.
             mocks['start_claude'].return_value = None
-            mocks['licensed'].return_value = True
             mocks['fast'].return_value = 'Opened Notes.'
             atticus.main()
             mocks['fast'].assert_called_once_with('open Notes')
@@ -203,8 +201,6 @@ class BrainTests(unittest.TestCase):
             marker, ready = Path(root) / 'action', Path(root) / 'ready'
             action = f'import time; from pathlib import Path; Path({str(ready)!r}).touch(); time.sleep(.5); Path({str(marker)!r}).touch()'
             script = f'''import atticus, subprocess, sys, time
-atticus.ping = lambda: None
-atticus.licensed = lambda: True
 def fast(_):
     subprocess.Popen([sys.executable, '-c', {action!r}])
     time.sleep(30)

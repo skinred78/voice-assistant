@@ -1,7 +1,7 @@
 // Atticus overlay: hold to talk and release to send, or press to start and press again to send.
 // A box in the top left (ui/ui.html, with the thinking-orbs orb) shows your words live (Apple on-device speech),
 // then Atticus's notes and steps while `atticus.py` works, then the answer. It never takes focus.
-// Build: ./build.sh. Kept running by ~/Library/LaunchAgents/com.atticus.app.plist
+// Build: ./build.sh. Kept running by ~/Library/LaunchAgents/com.skinred78.voice-assistant.plist
 import Cocoa
 import Carbon
 import AVFoundation
@@ -12,14 +12,14 @@ import Vision
 
 let dir = Bundle.main.resourcePath!   // build.sh copies atticus.py and ui/ in here
 
-// Settings, shared with atticus.py (model, screen, openOn, instant): ~/.config/atticus/settings.json
+// Settings, shared with atticus.py (model, screen, openOn, instant): ~/.config/voice-assistant/settings.json
 enum Prefs {
-    static let path = NSString(string: "~/.config/atticus/settings.json").expandingTildeInPath
+    static let path = NSString(string: "~/.config/voice-assistant/settings.json").expandingTildeInPath
     static let defaults: [String: Any] = ["hotkeyCode": 49, "hotkeyMods": controlKey | optionKey, "hotkeyLabel": "⌃⌥Space", "login": true, "paused": false, "corner": "top-left", "linger": "normal",
         "soundStart": "Pop", "soundDone": "Glass", "soundStop": "Tink", "volume": 0.16, "model": "haiku", "instant": true,
         "ahead": true, "aheadDelay": 0.7, "live": true, "screen": "auto", "openOn": "here",
-        "speak": false, "autoCopy": false, "hideWhenSharing": true, "menuIcon": true, "autoUpdate": true,
-        "learn": true, "safe": true, "pointer": false, "learnMe": true, "stats": true, "tips": true, "askMe": true, "input": "voice", "talkMode": "hold", "boxW": 460, "boxH": 360]
+        "speak": false, "autoCopy": false, "hideWhenSharing": true, "menuIcon": true,
+        "learn": true, "safe": true, "pointer": false, "learnMe": true, "tips": true, "askMe": true, "input": "voice", "talkMode": "hold", "boxW": 460, "boxH": 360]
     static var d: [String: Any] = defaults.merging(
         (try? JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path)))) as? [String: Any] ?? [:]) { $1 }
     static func set(_ k: String, _ v: Any) {
@@ -120,7 +120,7 @@ final class App: NSObject, WKScriptMessageHandler {
     var askFile = ""   // safe mode: where the Allow / Don't Allow answer goes (atticus.py's gate waits on it)
     var hovering = false, xHot = false, pinned = false, stuck = false, lastDone = Date.distantPast   // pinned: the user clicked the box, so only Esc / click-out / ✕ close it; stuck: the user dragged it, so only ✕
     var mine = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""   // the app the user's in, never Atticus itself
-    let recent = NSString(string: "~/.config/atticus/recent.jsonl").expandingTildeInPath
+    let recent = NSString(string: "~/.config/voice-assistant/recent.jsonl").expandingTildeInPath
     func frame(_ requested: NSRect) {   // keep the close button and composer reachable on every display
         let screen = NSScreen.screens.max { a, b in
             let x = a.visibleFrame.intersection(requested), y = b.visibleFrame.intersection(requested)
@@ -702,7 +702,7 @@ final class App: NSObject, WKScriptMessageHandler {
 }
 
 // First-run window (ui/onboarding.html): welcome, then each macOS permission with an Allow button, then how to use it.
-// Shows until finished once; to see it again: defaults delete com.atticus.app onboarded, then restart the app.
+// Shows until finished once; to see it again: defaults delete com.skinred78.voice-assistant onboarded, then restart the app.
 final class Onboarding: NSObject, WKScriptMessageHandler, NSWindowDelegate {
     var win: NSWindow?, web: WKWebView?, timer: Timer?
     let pane = "x-apple.systempreferences:com.apple.preference.security?Privacy_"
@@ -910,58 +910,15 @@ func jsonString(_ s: String) -> String { String(data: try! JSONSerialization.dat
 // Restart Atticus (Screen Recording only takes effect in a new process); works under launchd or when opened by hand.
 func relaunchSoon() {
     let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/sh")
-    p.arguments = ["-c", "sleep 1; launchctl bootout gui/\(getuid())/com.atticus.app >/dev/null 2>&1; sleep 1; launchctl bootstrap gui/\(getuid()) \"$1\" 2>/dev/null || open \"$0\"",
-                   Bundle.main.bundlePath, NSHomeDirectory() + "/Library/LaunchAgents/com.atticus.app.plist"]
+    p.arguments = ["-c", "sleep 1; launchctl bootout gui/\(getuid())/com.skinred78.voice-assistant >/dev/null 2>&1; sleep 1; launchctl bootstrap gui/\(getuid()) \"$1\" 2>/dev/null || open \"$0\"",
+                   Bundle.main.bundlePath, NSHomeDirectory() + "/Library/LaunchAgents/com.skinred78.voice-assistant.plist"]
     try? p.run()
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
 }
 
-// Updates: build.sh records the source folder (a git clone); Atticus pulls and rebuilds itself from it, then
-// restarts once idle. Local edits or a failed build leave the running version alone.
-enum Updater {
-    static let src = Bundle.main.object(forInfoDictionaryKey: "AtticusSource") as? String ?? ""
-    static var status = ""
-    static func sh(_ script: String) -> (code: Int32, out: String) {
-        let p = Process(), o = Pipe()
-        p.executableURL = URL(fileURLWithPath: "/bin/zsh"); p.arguments = ["-c", script, src]; p.standardOutput = o; p.standardError = o
-        var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"; env["ATTICUS_NO_RESTART"] = "1"; p.environment = env
-        try? p.run(); p.waitUntilExit()
-        return (p.terminationStatus, String(data: o.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")
-    }
-    static let version: String = {
-        sh(#"cd "$0" 2>/dev/null && git log -1 --format='%h · %cd' --date=format:'%b %-d, %Y'"#).out.trimmingCharacters(in: .whitespacesAndNewlines)
-    }()
-    static func check(_ done: @escaping () -> Void = {}) {
-        status = "Checking…"; done()
-        DispatchQueue.global().async {
-            let r = sh(#"""
-                cd "$0" 2>/dev/null || exit 3
-                [ -z "$(git status --porcelain)" ] || exit 5
-                git fetch -q 2>/dev/null || exit 4
-                [ "$(git rev-parse HEAD)" = "$(git rev-parse '@{u}')" ] && exit 0
-                git pull -q --ff-only 2>/dev/null || exit 5
-                ./build.sh >/dev/null 2>&1 || exit 6
-                exit 10
-                """#)
-            DispatchQueue.main.async {
-                status = [0: "Up to date", 3: "Source folder not found (reinstall with build.sh)", 4: "Couldn’t reach GitHub",
-                          5: "Skipped: the source folder has local changes", 6: "Update downloaded, but the build failed",
-                          10: "Updated. Restarting when you’re not using it…"][r.code] ?? "Update failed"
-                done()
-                if r.code == 10 { restartWhenIdle() }
-            }
-        }
-    }
-    static func restartWhenIdle() {
-        if app.busy || app.engine.isRunning || app.voice?.isRunning == true || settings.win?.isKeyWindow == true || onboarding.win != nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 30) { restartWhenIdle() }
-        } else { relaunchSoon() }
-    }
-    static func schedule() {   // a minute after launch, then every 6 hours
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { if Prefs.bool("autoUpdate") { check() } }
-        Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { _ in if Prefs.bool("autoUpdate") { check() } }
-    }
+// Version: build.sh records the commit it built from. There is no self-updater: pull and run ./build.sh to update.
+enum Version {
+    static let string = Bundle.main.object(forInfoDictionaryKey: "SourceCommit") as? String ?? ""
 }
 
 // Opening Atticus again (Spotlight, Finder, Dock) while it runs: setup the first time, Settings after.
@@ -978,7 +935,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     override init() {
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Atticus")
+        item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voice Assistant")
         let m = NSMenu(); m.delegate = self; item.menu = m
         item.isVisible = Prefs.bool("menuIcon")
         paint()
@@ -988,7 +945,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         m.removeAllItems()
         let keys = Prefs.str("hotkeyLabel")
         let hint = Prefs.str("input") == "type" ? "Press \(keys) to type" : Prefs.str("talkMode") == "toggle" ? "Press \(keys) to talk · again to send" : "Hold \(keys) and talk"
-        let head = NSMenuItem(title: Prefs.bool("paused") ? "Atticus is paused" : hint, action: nil, keyEquivalent: "")
+        let head = NSMenuItem(title: Prefs.bool("paused") ? "Voice Assistant is paused" : hint, action: nil, keyEquivalent: "")
         head.isEnabled = false; m.addItem(head)
         m.addItem(.separator())
         add(m, "Ask Atticus", #selector(ask), "")
@@ -1004,7 +961,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     func add(_ m: NSMenu, _ t: String, _ a: Selector, _ k: String) { let i = NSMenuItem(title: t, action: a, keyEquivalent: k); i.target = self; m.addItem(i) }
     func today() -> String {
         let day = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
-        let log = (try? String(contentsOfFile: NSString(string: "~/.config/atticus/log.jsonl").expandingTildeInPath, encoding: .utf8)) ?? ""
+        let log = (try? String(contentsOfFile: NSString(string: "~/.config/voice-assistant/log.jsonl").expandingTildeInPath, encoding: .utf8)) ?? ""
         let rows = log.split(separator: "\n").compactMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
             .filter { ($0["at"] as? String ?? "").hasPrefix(day) }
         let usd = rows.reduce(0.0) { $0 + (($1["usd"] as? NSNumber)?.doubleValue ?? 0) }
@@ -1127,7 +1084,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         tab = t
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
                          styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
-        w.titlebarAppearsTransparent = true; w.titleVisibility = .hidden; w.title = "Atticus Settings"
+        w.titlebarAppearsTransparent = true; w.titleVisibility = .hidden; w.title = "Voice Assistant Settings"
         w.isReleasedWhenClosed = false; w.delegate = self
         let bg = NSVisualEffectView(frame: w.contentRect(forFrameRect: w.frame))
         bg.material = .underWindowBackground; bg.blendingMode = .behindWindow; bg.state = .active
@@ -1152,7 +1109,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
     }
 
     func push() {   // the settings, and the app icon for the sidebar
-        var d: [String: Any] = ["prefs": Prefs.d, "version": Updater.version, "update": Updater.status]
+        var d: [String: Any] = ["prefs": Prefs.d, "version": Version.string]
         if let t = NSApp.applicationIconImage?.tiffRepresentation, let png = NSBitmapImageRep(data: t)?.representation(using: .png, properties: [:]) {
             d["icon"] = "data:image/png;base64," + png.base64EncodedString()
         }
@@ -1219,7 +1176,7 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         if k == "safe" { app.js("mode", v as? Bool == true) }
         if k == "login" {   // the LaunchAgent build.sh installed: enabled = starts at login
             let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            p.arguments = [v as? Bool == true ? "enable" : "disable", "gui/\(getuid())/com.atticus.app"]; try? p.run()
+            p.arguments = [v as? Bool == true ? "enable" : "disable", "gui/\(getuid())/com.skinred78.voice-assistant"]; try? p.run()
         }
     }
 
@@ -1234,15 +1191,14 @@ final class SettingsWindow: NSObject, WKScriptMessageHandler, WKNavigationDelega
         case "unlearn":
             guard let say = b["say"] as? String else { return }
             DispatchQueue.global().async { [weak self] in self?.helper(["--unlearn", say]); DispatchQueue.main.async { self?.refresh() } }
-        case "checkUpdate": Updater.check { [weak self] in self?.push() }
-        case "github": NSWorkspace.shared.open(URL(string: "https://github.com/SaarthurR/atticus-mac")!)
+        case "github": NSWorkspace.shared.open(URL(string: "https://github.com/skinred78/voice-assistant")!)
         case "resetHotkey":
             Prefs.set("hotkeyCode", 49); Prefs.set("hotkeyMods", controlKey | optionKey); Prefs.set("hotkeyLabel", "⌃⌥Space")
             registerHotkey(); push()
         case "preview":
             if let n = b["sound"] as? String { app.sound(n, Float(Prefs.num("volume"))) }
         case "setup": onboarding.open()
-        case "openLog": NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.config/atticus/log.jsonl").expandingTildeInPath))
+        case "openLog": NSWorkspace.shared.open(URL(fileURLWithPath: NSString(string: "~/.config/voice-assistant/log.jsonl").expandingTildeInPath))
         case "clearRecent": try? FileManager.default.removeItem(atPath: app.recent); app.lastDone = .distantPast
         case "me":   // About you: name / about / drop a fact
             guard let what = b["what"] as? String, let text = b["text"] as? String else { return }
@@ -1285,7 +1241,7 @@ if CommandLine.arguments.dropFirst() == ["--selftest"] {
     precondition(transcriptKey("open a-b.com") != transcriptKey("open ab.com"))
     print("native selftest ok"); exit(0)
 }
-let lockFD = open(NSString(string: "~/.config/atticus/app.lock").expandingTildeInPath, O_CREAT | O_RDWR, 0o644)
+let lockFD = open(NSString(string: "~/.config/voice-assistant/app.lock").expandingTildeInPath, O_CREAT | O_RDWR, 0o644)
 if lockFD >= 0 && flock(lockFD, LOCK_EX | LOCK_NB) != 0 {
     for _ in 0..<15 where flock(lockFD, LOCK_EX | LOCK_NB) != 0 { usleep(100_000) }   // a restart: the old one is exiting
     if flock(lockFD, LOCK_EX | LOCK_NB) != 0 { exit(0) }
@@ -1316,9 +1272,8 @@ let settings = SettingsWindow()
 let bar = MenuBar()
 let delegate = Delegate()
 NSApplication.shared.delegate = delegate
-Updater.schedule()
 
-// Test hook: `defaults write com.atticus.app demo -string "<request>"` then restart runs it once without the mic.
+// Test hook: `defaults write com.skinred78.voice-assistant demo -string "<request>"` then restart runs it once without the mic.
 if let demo = UserDefaults.standard.string(forKey: "demo") {
     UserDefaults.standard.removeObject(forKey: "demo")
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { app.js("listen"); app.show(); app.js("words", demo); app.run(demo) }
